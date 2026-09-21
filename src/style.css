@@ -1,0 +1,234 @@
+/* ==========================================================================
+   style.css — hand-written, no framework.
+   Colour values are injected as custom properties from src/config.js at
+   boot (see applyPalette in main.js), so editing config.js changes the CSS
+   too. The values below are only fallbacks for first paint.
+   ========================================================================== */
+
+:root {
+  --bg: #07070a;
+  --grid: #1e1e26;
+  --ink: #f2f2f5;
+  --ink-muted: #7a7a88;
+  --beam: #8e8e98;
+  --accent-0: #e4443a;
+  --accent-1: #f2c53d;
+  --accent-2: #3fae5a;
+  --accent-3: #3d7de8;
+
+  --ui-font: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --gutter: 28px;
+  --overlay-w: 210px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Lock scrolling until the visitor has entered. */
+body.is-locked {
+  overflow: hidden;
+  height: 100vh;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Visible focus everywhere. Never remove this. */
+:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 3px;
+}
+
+/* ==========================================================================
+   ENTRY GATE
+   ========================================================================== */
+
+.entry {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  opacity: 1;
+  transition: opacity 0.85s ease;
+}
+
+.entry.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#entry-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.entry__corner {
+  position: absolute;
+  bottom: var(--gutter);
+  z-index: 2;
+}
+
+.entry__corner--bl {
+  left: var(--gutter);
+}
+
+.entry__corner--br {
+  right: var(--gutter);
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.entry__name {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.entry__name span {
+  display: block;
+}
+
+.entry__since {
+  margin: 8px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.entry__tagline {
+  margin: 4px 0 0;
+  max-width: 34ch;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.entry__notice {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.enter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  min-width: 190px;
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 1px solid var(--ink-muted);
+  cursor: not-allowed;
+  transition:
+    color 0.25s ease,
+    border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.enter.is-ready {
+  color: var(--ink);
+  border-color: var(--ink);
+  cursor: pointer;
+}
+
+.enter.is-ready:hover,
+.enter.is-ready:focus-visible {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.enter__arrow {
+  transition: transform 0.25s ease;
+}
+
+.enter.is-ready:hover .enter__arrow {
+  transform: translateX(4px);
+}
+
+/* ==========================================================================
+   3D CANVAS + SCROLL DRIVER
+   ========================================================================== */
+
+.webgl {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+}
+
+.webgl[hidden] {
+  display: none;
+}
+
+.scroll-spacer {
+  position: relative;
+  width: 100%;
+  pointer-events: none;
+  /* height is set from config.js in main.js */
+}
+
+/* ==========================================================================
+   MODE FLAGS
+   ========================================================================== */
+
+body.mode-2d .webgl,
+body.mode-2d .scroll-spacer {
+  display: none;
+}
+
+body.mode-3d .doc {
+  display: none;
+}
+
+/* Dot grid behind 2D mode, applied via JS-generated data URI. */
+body.mode-2d {
+  background-color: var(--bg);
+}
