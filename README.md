@@ -37,6 +37,11 @@ There are exactly two files you need. **You never have to touch anything in
 `src/ui/`, `src/world/` or `src/audio/` to change your content or your
 colours.**
 
+There is also a `ui` block at the top of `content.js` holding every word of
+interface text — the nav heading, "View :", "Sound :", "On", "Off", the
+accessible labels read out by screen readers, and the short introduction at
+the top of the reading view. Change the wording there, not in a module.
+
 ### 1. Your words → `src/content.js`
 
 Every piece of text on the site lives in this one file: your name, the
@@ -176,9 +181,14 @@ src/
   content.js        ALL your text — nothing else
   config.js         palette, camera angle, tuning values
   style.css         hand-written CSS
+  sections.js       maps a section to a point on the route (and back)
   ui/
     entry.js        the Enter gate: wordmark, flicker, drifting squares
     dotGrid.js      generates the dot-grid texture used everywhere
+    overlay.js      the fixed top-left chrome: logo, nav, View, Sound
+    document2d.js   2D mode — the same content as a real document
+  audio/
+    audio.js        the sound manager, raw Web Audio API
   world/
     scene.js        builds and runs the 3D world
     camera.js       the camera rig and its tuning constants
@@ -215,3 +225,46 @@ your mouse — which is what 2D mode is for.
 worked out purely from how far down the page you are, with nothing carried
 over between frames. That is why scrolling back up retraces the route exactly
 instead of slowly drifting out of alignment.
+
+---
+
+## Reading view (2D)
+
+The **View** control, top left, switches between the 3D world and a plain
+document of the same content — click the document icon, or tab to it and press
+Enter. It is a real document: proper headings in order, text you can select,
+search, copy and print, and real links. It is what a screen reader, a printer
+and a machine without a working graphics card get.
+
+Switching either way keeps your place: leave the world at section 03 and the
+document opens at section 03, and vice versa.
+
+If WebGL is unavailable the site opens straight into the reading view and the
+3D control is disabled rather than silently doing nothing.
+
+## Sound
+
+The **Sound** control turns the audio on and off. Two things worth knowing:
+
+- It changes the volume only. The background track keeps playing underneath,
+  so turning sound back on drops you into the track where it had got to
+  instead of restarting it — and nothing about scrolling or jumping between
+  sections restarts it either.
+- Nothing is loaded or played until you click **Enter**. Browsers refuse to
+  start audio before a click, so that is the one place it can begin.
+
+Your choice is remembered for the rest of the visit (in `sessionStorage`), not
+for ever.
+
+## Accessibility
+
+- Every control in the overlay is a real `<button>`, reachable by keyboard,
+  with a visible focus outline and a spoken label.
+- The current section carries `aria-current`, and section changes are
+  announced through a polite live region.
+- 2D mode is the accessible path through the whole site: one `<h1>`, an `<h2>`
+  per section in source order, and body text at 18:1 contrast.
+- The headings in 2D mode are drawn with the pixel font as images, with the
+  real heading text beside them in the accessibility tree, so the document
+  outline is correct even though the visible heading is pixels.
+

@@ -244,6 +244,68 @@ export const entry = {
 };
 
 /* ------------------------------------------------------------------ */
+/* OVERLAY (M4)                                                        */
+/* ------------------------------------------------------------------ */
+/* The persistent top-left chrome. It is position: fixed and never moves,
+ * in either 2D or 3D mode. Sizes here are CSS pixels. */
+
+export const overlay = {
+  LOGO_PIXEL_PX: 4, // on-screen size of one logo-mark pixel
+  LOGO_GAP_PX: 1, // gap between logo pixels
+  LOGO_PAD_PX: 9, // space between the pixels and the thin rectangle
+  /* How many logo pixels are permanently accent-coloured. These are chosen
+   * once, deterministically (see pickAccentIndices), so the mark looks the
+   * same on every load rather than flickering like the entry wordmark. */
+  LOGO_ACCENT_PIXELS: 3,
+
+  ICON_PX: 22, // the 3D / document icons in the View row
+  /* The legibility scrim. It has to carry the MUTED grey text, not just the
+   * white, over whatever scenery is behind it — so it is close to solid over
+   * the control column and only feathers out past it. Sized generously: it
+   * must still cover the column at any font size. */
+  SCRIM_WIDTH_PX: 320,
+  SCRIM_HEIGHT_PX: 620,
+  SCRIM_ALPHA: 0.94, // opacity at the corner, where the controls are
+};
+
+/* ------------------------------------------------------------------ */
+/* 2D DOCUMENT (M5)                                                    */
+/* ------------------------------------------------------------------ */
+
+export const doc = {
+  MEASURE_CH: 68, // body text measure, in characters
+  HEADING_PIXEL_PX: 6, // size of one pixel in a bitmap-font heading
+  HEADING_GAP_PX: 1,
+  DOT_SPACING_PX: 28, // same dot grid as the entry gate
+  DOT_SIZE_PX: 2,
+  SCROLL_BEHAVIOUR: 'smooth', // set 'auto' to disable smooth nav scrolling
+};
+
+/* ------------------------------------------------------------------ */
+/* AUDIO (M6)                                                          */
+/* ------------------------------------------------------------------ */
+/* Raw Web Audio API, no library. The loader tries the formats in ORDER,
+ * so dropping public/audio/theme.mp3 in beats the shipped .wav with no
+ * code change. */
+
+export const audio = {
+  BASE: 'audio/', // relative to the site root; works under a sub-path
+  FORMATS: ['mp3', 'ogg', 'wav'],
+  THEME: 'theme',
+  SFX: ['sfx-enter', 'sfx-nav', 'sfx-toggle'],
+
+  THEME_GAIN: 0.32, // the loop, at full volume
+  SFX_GAIN: 0.45,
+  FADE_IN: 1.8, // seconds, when the loop first starts
+  MUTE_RAMP: 0.18, // seconds, for a mute/unmute gain ramp
+
+  /* sessionStorage key holding 'on' or 'off'. sessionStorage, not
+   * localStorage: a sound preference should not outlive the visit. */
+  STORAGE_KEY: 'mb.sound',
+  DEFAULT_ON: true,
+};
+
+/* ------------------------------------------------------------------ */
 /* FALLBACKS                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -268,3 +330,22 @@ export const pitchCompensation = () =>
 /** Pick a random accent colour as a hex number. */
 export const randomAccent = () =>
   palette.accents[(Math.random() * palette.accents.length) | 0];
+
+/**
+ * Deterministically choose `count` distinct indices out of `total`.
+ * Used for the permanently-coloured pixels in the logo mark: the same
+ * pixels every load, no timer, no flicker.
+ */
+export const pickAccentIndices = (total, count) => {
+  const out = [];
+  if (total <= 0) return out;
+  // A golden-ratio stride spreads the picks out without clustering.
+  const stride = Math.max(1, Math.round(total * 0.381966));
+  let i = Math.floor(total * 0.17) % total;
+  for (let k = 0; k < Math.min(count, total); k++) {
+    while (out.includes(i)) i = (i + 1) % total;
+    out.push(i);
+    i = (i + stride) % total;
+  }
+  return out;
+};

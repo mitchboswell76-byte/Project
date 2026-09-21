@@ -232,3 +232,382 @@ body.mode-3d .doc {
 body.mode-2d {
   background-color: var(--bg);
 }
+
+/* ==========================================================================
+   PERSISTENT OVERLAY (M4)
+   Fixed top-left, present in both modes, never moves or reflows.
+   ========================================================================== */
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  width: var(--overlay-w);
+  padding: var(--gutter);
+  /* The scrim catches pointer events; the controls opt back in. */
+  pointer-events: none;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+/* Legibility over bright scenery. A soft corner gradient rather than a
+   panel: it darkens the pixels behind the text without drawing a box. */
+.overlay__scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--scrim-w, 320px);
+  height: var(--scrim-h, 620px);
+  pointer-events: none;
+  /* Near-solid across the control column, then a long feather so there is
+     no visible edge. The muted grey text has to stay readable over bright
+     scenery, which a soft vignette alone does not achieve. */
+  background: radial-gradient(
+    145% 125% at 0% 0%,
+    rgba(var(--bg-rgb, 7, 7, 10), var(--scrim-alpha, 0.94)) 0%,
+    rgba(var(--bg-rgb, 7, 7, 10), calc(var(--scrim-alpha, 0.94) * 0.97)) 48%,
+    rgba(var(--bg-rgb, 7, 7, 10), calc(var(--scrim-alpha, 0.94) * 0.62)) 74%,
+    rgba(var(--bg-rgb, 7, 7, 10), 0) 100%
+  );
+}
+
+.overlay__inner {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* ---------- logo mark ---------- */
+
+.overlay__mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ink-muted);
+}
+
+.overlay__logo {
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ---------- site name ---------- */
+
+.overlay__name {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+}
+
+.overlay__name span {
+  display: block;
+}
+
+/* ---------- nav ---------- */
+
+.overlay__nav {
+  margin-top: 30px;
+}
+
+.overlay__nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overlay__nav li + li {
+  margin-top: 5px;
+}
+
+.navlink {
+  display: block;
+  margin: 0;
+  padding: 1px 0;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-align: left;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.navlink:hover {
+  color: var(--ink);
+}
+
+.navlink.is-current {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---------- rows: View / Sound ---------- */
+
+.overlay__row {
+  margin-top: 26px;
+}
+
+.overlay__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+
+.overlay__icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overlay__arrow {
+  /* Big enough to read as an arrow rather than a dash at this size. */
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+
+.overlay__sep {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.icon {
+  display: block;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.icon__frame {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-dasharray: 2 2; /* inactive reads as a dashed outline */
+}
+
+.icon__fill {
+  fill: currentColor;
+}
+
+.icon__rule {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.icon.is-active {
+  color: var(--ink);
+}
+
+.icon.is-active .icon__frame {
+  stroke-dasharray: none; /* active reads as a solid box */
+}
+
+.icon:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- sound ---------- */
+
+.overlay__sound {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.soundbtn {
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.soundbtn:hover {
+  color: var(--ink);
+}
+
+.soundbtn.is-active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   2D DOCUMENT (M5)
+   ========================================================================== */
+
+.doc {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  padding: 120px var(--gutter) 160px calc(var(--overlay-w) + var(--gutter));
+  color: var(--ink);
+}
+
+.doc[hidden] {
+  display: none;
+}
+
+.doc__article {
+  max-width: var(--measure, 68ch);
+}
+
+.doc__header {
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--grid);
+}
+
+.doc__title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.doc__tagline {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.doc__intro {
+  margin: 22px 0 0;
+  max-width: 54ch;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+}
+
+.doc__section {
+  padding: 56px 0 0;
+}
+
+.doc__eyebrow {
+  margin: 0 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.doc__heading {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.doc__pixels {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.doc__sub {
+  margin: 18px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.doc__body {
+  margin: 18px 0 0;
+  font-family: var(--doc-font);
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.doc__principles {
+  margin: 20px 0 0;
+  padding-left: 1.4em;
+  font-family: var(--doc-font);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.doc__principles li + li {
+  margin-top: 10px;
+}
+
+.doc__links {
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 2;
+}
+
+.doc a {
+  color: var(--ink);
+  text-decoration-color: var(--ink-muted);
+  text-underline-offset: 3px;
+}
+
+.doc a:hover {
+  text-decoration-color: var(--ink);
+}
+
+/* Narrow screens: the overlay no longer has a column of its own, so the
+   document runs full width beneath it. */
+@media (max-width: 720px) {
+  .doc {
+    padding-left: var(--gutter);
+    padding-top: 340px;
+  }
+
+  .overlay {
+    width: auto;
+  }
+}
+
+@media print {
+  .overlay,
+  .webgl,
+  .scroll-spacer {
+    display: none !important;
+  }
+
+  .doc {
+    padding: 0;
+    background: none;
+    color: #000;
+  }
+}

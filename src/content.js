@@ -20,6 +20,43 @@ export const content = {
     enterLabel: 'Enter',
   },
 
+  /* ------------------------------------------------------------------ */
+  /* UI CHROME — the persistent overlay and 2D document.                  */
+  /* Every visible word of interface text is here too, so the whole site  */
+  /* can be re-worded (or translated) without opening a module.           */
+  /* ------------------------------------------------------------------ */
+  ui: {
+    navLabel: 'Sections',           // aria-label on the <nav>
+    viewLabel: 'View :',
+    soundLabel: 'Sound :',
+    on: 'On',
+    off: 'Off',
+    separator: '/',
+
+    /* Accessible names for the controls. Kept separate from the visible
+     * labels above because a screen reader needs the whole sentence. */
+    a11y: {
+      logo: 'Home',
+      navItem: (label) => `Go to ${label}`,
+      view3d: 'Switch to the 3D world',
+      view2d: 'Switch to the reading view',
+      soundOn: 'Turn sound on',
+      soundOff: 'Turn sound off',
+      skipToContent: 'Skip to content',
+      sectionAnnounce: (label) => `${label} section`,
+    },
+
+    /* 2D reading view. */
+    doc: {
+      intro:
+        'The reading view. The same content as the 3D world, as a plain document you can select, search, print and read with a screen reader.',
+      contactHeading: 'Contact',
+      philosophyHeading: 'Principles',
+      backToTop: 'Back to top',
+      cvLabel: 'Curriculum vitae (PDF)',
+    },
+  },
+
   sections: [
     {
       id: 'profile',
