@@ -86,17 +86,33 @@ await page
   .catch(() => check(false, 'Enter button becomes enabled once the world is warm'));
 
 await page.click('#enter-button');
-await page.waitForTimeout(3600);
+/* Wait for the transition to hand over rather than for a fixed time, so
+ * retuning INTRO_DURATION does not quietly break every check after this. */
+await page
+  .waitForFunction(() => Boolean(window.__site?.scroller), { timeout: 20000 })
+  .catch(() => {});
+await page.waitForTimeout(400);
 await page.screenshot({ path: `${SHOTS}/02-after-enter.png` });
 
 const hasWorld = await page.evaluate(() => Boolean(window.__site?.world));
 check(hasWorld, 'world is live after Enter');
 
-/** Scroll to a normalised progress and read back the camera transform. */
+/* Where the sections actually are, read from the running site rather than
+ * copied here — re-laying out the route must not silently invalidate every
+ * check below. */
+const ANCHORS = await page.evaluate(() => window.__site.anchors);
+const [PLAZA, HARBOUR, GARDENS, SNOWFIELD] = ANCHORS;
+
+/**
+ * Go to a normalised progress and read back the camera transform.
+ *
+ * Via the scroll driver, not a raw scrollTo: the page is one lap plus a
+ * buffer at each end, so scroll position and progress are no longer the same
+ * fraction of each other.
+ */
 const at = (p) =>
   page.evaluate((q) => {
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    window.scrollTo(0, q * max);
+    window.__site.scroller.jumpTo(q);
     return new Promise((r) =>
       setTimeout(() => {
         const c = window.__site.world.camera;
@@ -124,23 +140,151 @@ check(
   `pos ${JSON.stringify(down.pos)}`
 );
 
-const top = await at(0);
-const mid = await at(0.5);
+/* Districts mount as you reach them and unmount once you have left. On the
+ * loop the sections are spread evenly, so this is about the set CHANGING as
+ * you travel, not about there being more of them in the middle. */
+const onDistrict = await at(HARBOUR);
+const betweenDistricts = await at(0.9); // the monument straight, no district
 check(
-  top.stats.chunks < mid.stats.chunks,
-  'chunks stream in as the camera travels',
-  `${top.stats.chunks} at start, ${mid.stats.chunks} mid-route`
+  onDistrict.stats.chunks > 0 && betweenDistricts.stats.chunks < onDistrict.stats.chunks,
+  'chunks stream in and out as the camera travels',
+  `${onDistrict.stats.chunks} at a district, ${betweenDistricts.stats.chunks} between them`
 );
+const mid = onDistrict;
 check(
   mid.stats.calls < 150,
   'draw calls stay inside the 150 budget',
   `${mid.stats.calls} draw calls, ${mid.stats.triangles.toLocaleString()} triangles`
 );
 
-for (const p of [0.3, 0.49, 0.68, 0.87]) {
+for (const p of ANCHORS) {
   await at(p);
   await page.screenshot({ path: `${SHOTS}/section-${String(p).replace('.', '_')}.png` });
 }
+
+/* ==================================================================== */
+/* The loop — the route has no end                                      */
+/* ==================================================================== */
+
+/* A closed curve means progress 1 IS progress 0: same point, same tangent,
+ * therefore the same camera transform to the last decimal. */
+const atOne = await at(1);
+const atZero = await at(0);
+check(
+  JSON.stringify(atOne.pos) === JSON.stringify(atZero.pos) &&
+    JSON.stringify(atOne.quat) === JSON.stringify(atZero.quat),
+  'progress 1 and progress 0 are the same camera transform',
+  `${JSON.stringify(atZero.pos)}`
+);
+
+/* And the approach to the join is as smooth as anywhere else: step across it
+ * and the camera should move by the same amount per step as it does mid-
+ * route. A seam would show up here as one step far longer than its
+ * neighbours — which is exactly what a wrap-around teleport looks like. */
+const stepDistances = async (from, count, step) => {
+  const out = [];
+  let previous = null;
+  for (let i = 0; i <= count; i++) {
+    const sample = await at(from + i * step);
+    if (previous) {
+      out.push(
+        Math.hypot(
+          sample.pos[0] - previous[0],
+          sample.pos[1] - previous[1],
+          sample.pos[2] - previous[2]
+        )
+      );
+    }
+    previous = sample.pos;
+  }
+  return out;
+};
+
+const acrossJoin = await stepDistances(0.97, 6, 0.01); // 0.97 → 1.03
+const midRoute = await stepDistances(0.4, 6, 0.01);
+const worstJoin = Math.max(...acrossJoin);
+const typical = midRoute.reduce((a, b) => a + b, 0) / midRoute.length;
+check(
+  worstJoin < typical * 1.6,
+  'stepping across the join moves the camera no further than anywhere else',
+  `worst step at the join ${worstJoin.toFixed(1)} units, typical ${typical.toFixed(1)}`
+);
+
+/* The page is one lap plus a buffer at each end. Scrolling off the end of the
+ * lap must move the SCROLL POSITION back by exactly one lap and leave the
+ * camera untouched — the scrollbar wraps, the world does not. */
+const wrapTest = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const site = window.__site;
+      site.scroller.jumpTo(0.5);
+      setTimeout(() => {
+        const before = {
+          pos: site.world.camera.position.toArray().map((v) => +v.toFixed(3)),
+          progress: site.scroller.progress,
+          scrollY: window.scrollY,
+        };
+        /* Scroll off the end of the lap region into the bottom buffer. The
+         * driver should pull the scroll position back by exactly one lap and
+         * leave progress — and the camera — where it was. */
+        const spacerPx = document.getElementById('scroll-spacer').offsetHeight;
+        const bufferPx = window.innerHeight * 1.2;
+        const lapPx = spacerPx - bufferPx * 2;
+        window.scrollTo(0, bufferPx + lapPx + 120);
+        setTimeout(() => {
+          resolve({
+            before,
+            after: {
+              pos: site.world.camera.position.toArray().map((v) => +v.toFixed(3)),
+              progress: site.scroller.progress,
+              scrollY: window.scrollY,
+            },
+            lapPx,
+          });
+        }, 350);
+      }, 350);
+    })
+);
+check(
+  wrapTest.after.progress < 0.02,
+  'scrolling off the end of the lap wraps into the start of it',
+  `progress ${wrapTest.after.progress.toFixed(4)} just past the end`
+);
+check(
+  wrapTest.after.scrollY < wrapTest.before.scrollY,
+  'and the scroll position is pulled back inside the lap',
+  `scroll ${Math.round(wrapTest.before.scrollY)} → ${Math.round(wrapTest.after.scrollY)}`
+);
+
+/* 0.999 and 0.001 are all but the same point on the loop, so exactly the same
+ * districts must be live at both. This is the check a linear chunk distance
+ * fails: it reads 0.999 as being a whole route away from a section at 0.13
+ * and drops everything for one frame as the camera crosses the join. */
+const justBefore = await at(0.999);
+const justAfter = await at(0.001);
+check(
+  justBefore.stats.chunks === justAfter.stats.chunks,
+  'the same districts are live either side of the join',
+  `${justBefore.stats.chunks} at 0.999, ${justAfter.stats.chunks} at 0.001`
+);
+
+/* The nav has to name a section everywhere on the loop — including the long
+ * monument stretch between the last anchor and the first. */
+const named = await page.evaluate(async () => {
+  const seen = new Set();
+  for (let i = 0; i < 20; i++) {
+    window.__site.scroller.jumpTo(i / 20);
+    await new Promise((r) => setTimeout(r, 60));
+    const b = document.querySelector('.navlink[aria-current="true"]');
+    seen.add(b ? Number(b.dataset.index) : -1);
+  }
+  return [...seen].sort();
+});
+check(
+  !named.includes(-1) && named.length === 4,
+  'a section is current at every point on the loop',
+  `saw sections ${JSON.stringify(named)}`
+);
 
 /* ==================================================================== */
 /* M7 — scenery                                                         */
@@ -185,7 +329,7 @@ const tallyFor = (audit, district, key) =>
     .filter((m) => m.name.includes(district))
     .reduce((n, m) => n + m.tally[key], 0);
 
-await at(0.3);
+await at(PLAZA);
 const plaza = await sceneAudit();
 const plazaScenery = plaza.instanced.filter((m) => m.name.startsWith('scenery-'));
 
@@ -213,9 +357,9 @@ check(
 );
 
 /* Themes: the harbour has to be full of water, the snowfield full of snow. */
-await at(0.49);
+await at(HARBOUR);
 const harbour = await sceneAudit();
-await at(0.87);
+await at(SNOWFIELD);
 const snow = await sceneAudit();
 
 check(
@@ -257,11 +401,11 @@ const fingerprint = () =>
     return { count: mesh.count, h };
   });
 
-await at(0.68);
+await at(GARDENS);
 const gardensA = await fingerprint();
-await at(0.2); // far enough away that the chunk is disposed
+await at(GARDENS + 0.3); // far enough away that the chunk is disposed
 const gone = await page.evaluate(() => window.__site.world.stats().chunks);
-await at(0.68);
+await at(GARDENS);
 const gardensB = await fingerprint();
 check(
   gardensA && gardensB && gardensA.h === gardensB.h && gardensA.count === gardensB.count,
@@ -323,7 +467,7 @@ console.log(
     'not a real frame rate'
 );
 
-for (const p of [0.3, 0.49, 0.68, 0.87]) {
+for (const p of ANCHORS) {
   await at(p);
   await page.screenshot({ path: `${SHOTS}/07-district-${String(p).replace('.', '_')}.png` });
 }
@@ -332,7 +476,7 @@ for (const p of [0.3, 0.49, 0.68, 0.87]) {
 /* M4 — the persistent overlay                                          */
 /* ==================================================================== */
 
-await at(0.3);
+await at(PLAZA);
 
 const overlayState = await page.evaluate(() => {
   const root = document.getElementById('overlay');
@@ -389,7 +533,7 @@ check(
 
 /* aria-current follows the camera. */
 const currents = [];
-for (const [i, p] of [0.3, 0.49, 0.68, 0.87].entries()) {
+for (const [i, p] of ANCHORS.entries()) {
   await at(p);
   currents.push(
     await page.evaluate(() => {
@@ -420,13 +564,22 @@ const focusRing = await page.evaluate(() => {
 });
 check(focusRing, 'focused controls get a visible outline');
 
-/* Clicking a nav label moves the camera. */
-await at(0.3);
-const posBefore = await page.evaluate(() => window.scrollY);
+/* Clicking a nav label moves the camera to that section. On a loop it may
+ * travel either way round to get there — whichever is shorter — so what
+ * matters is where it arrives, not which direction the page scrolled. */
+await at(PLAZA);
+const navBefore = await page.evaluate(() => window.__site.scroller.progress);
 await page.click('.navlink[data-index="3"]');
 await page.waitForTimeout(2200);
-const posAfter = await page.evaluate(() => window.scrollY);
-check(posAfter > posBefore, 'clicking a nav label animates the camera onwards');
+const navAfter = await page.evaluate(() => ({
+  progress: window.__site.scroller.progress,
+  current: Number(document.querySelector('.navlink[aria-current="true"]')?.dataset.index ?? -1),
+}));
+check(
+  Math.abs(navAfter.progress - SNOWFIELD) < 0.02 && navAfter.current === 3,
+  'clicking a nav label animates the camera to that section',
+  `${navBefore.toFixed(2)} → ${navAfter.progress.toFixed(2)}`
+);
 
 await page.screenshot({ path: `${SHOTS}/03-overlay.png` });
 
@@ -512,7 +665,7 @@ check(
 /* M5 — 2D mode                                                         */
 /* ==================================================================== */
 
-await at(0.68); // section 03
+await at(GARDENS); // section 03
 const progressBefore = await page.evaluate(() => window.__site.scroller.progress);
 
 await page.click('.icon--doc');
@@ -910,8 +1063,7 @@ let peakCalls = { calls: 0 };
 let peakTris = { triangles: 0 };
 for (let q = 0; q <= 1.0001; q += 0.05) {
   const s = await page.evaluate((v) => {
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    window.scrollTo(0, v * max);
+    window.__site.scroller.jumpTo(v);
     return new Promise((r) => setTimeout(() => r(window.__site.world.stats()), 280));
   }, q);
   if (s.calls > peakCalls.calls) peakCalls = { ...s, q: +q.toFixed(2) };
@@ -925,7 +1077,7 @@ check(
 );
 
 console.log('\n  progress   calls  triangles   (SwiftShader fps — not a real frame rate)');
-for (const q of [0.15, 0.3, 0.49, 0.68, 0.87]) {
+for (const q of [0, ...ANCHORS, 0.9]) {
   await at(q);
   const s = await page.evaluate(
     () =>

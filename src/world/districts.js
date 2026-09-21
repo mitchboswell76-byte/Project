@@ -25,16 +25,25 @@ import { headingAt, offsetFromPath, textHeadingAt, totalLength } from './path.js
 import { createVoxelBatch, makeRng } from './voxelBatch.js';
 import * as props from './props.js';
 
-/* Where each element sits along the route, as an offset in normalised
- * progress from the section's anchor. The route is ~1115 units long, so
- * 0.01 here is roughly 11 world units. */
-const LAYOUT = {
-  RISER: 0.0,
-  HEADING: 0.028,
-  SUB_LABEL: 0.050,
-  BODY_START: 0.080,
-  BODY_STEP: 0.042,
+/* Where each element sits along the route, as an offset in WORLD UNITS from
+ * the section's anchor, converted to progress against the measured length of
+ * the curve. World units rather than a fraction of the route, so that
+ * re-laying out PATH_POINTS moves the districts without also stretching the
+ * gaps between a heading and its own body copy. */
+const LAYOUT_UNITS = {
+  RISER: 0,
+  HEADING: 31,
+  SUB_LABEL: 56,
+  BODY_START: 89,
+  BODY_STEP: 47,
 };
+
+/** World units → a progress offset on this particular route. */
+const along = (units) => units / totalLength;
+
+const LAYOUT = Object.fromEntries(
+  Object.entries(LAYOUT_UNITS).map(([k, v]) => [k, along(v)])
+);
 
 /**
  * @param {object} section  one entry from content.sections
@@ -235,7 +244,7 @@ function latticeOf(side, tile) {
   const lo = Math.min(side[0], side[1]);
   const hi = Math.max(side[0], side[1]);
   const cols = Math.max(1, Math.round((hi - lo) / tile) + 1);
-  const rows = Math.max(1, Math.round((scfg.SPAN * totalLength) / tile) + 1);
+  const rows = Math.max(1, Math.round(scfg.SPAN_UNITS / tile) + 1);
   return { lo, cols, rows, step: tile };
 }
 
@@ -266,21 +275,25 @@ export function buildScenery(section, u, index) {
       : Math.max(0, Math.round((item.count ?? 1) * scfg.DENSITY));
 
     for (let i = 0; i < count; i++) {
-      let along;
+      let alongU;
       let side;
 
       if (lattice) {
         const col = i % lattice.cols;
         const row = (i / lattice.cols) | 0;
         side = lattice.lo + col * lattice.step;
-        along = u + scfg.SPAN_START + (row * item.tile) / totalLength;
+        alongU = u + along(scfg.SPAN_START_UNITS + row * item.tile);
       } else {
-        along =
-          u + (item.along ?? scfg.SPAN_START + ((i + rng()) / Math.max(count, 1)) * scfg.SPAN);
+        alongU =
+          u +
+          (item.along ??
+            along(
+              scfg.SPAN_START_UNITS + ((i + rng()) / Math.max(count, 1)) * scfg.SPAN_UNITS
+            ));
         side = lateral(item.side, rng);
       }
-      const origin = offsetFromPath(along, side, 0, height(item.y, rng));
-      const rotY = headingAt(along) + (item.face ?? rng() * TAU);
+      const origin = offsetFromPath(alongU, side, 0, height(item.y, rng));
+      const rotY = headingAt(alongU) + (item.face ?? rng() * TAU);
       const jitter = item.jitter ?? 0;
       const scale = (item.scale ?? 1) * (1 - jitter / 2 + rng() * jitter);
 
@@ -295,9 +308,9 @@ export function buildScenery(section, u, index) {
   /* The small cubes that float and bob in the air, everywhere. */
   const [fy0, fy1] = scfg.FLOAT_HEIGHT;
   for (let i = 0; i < Math.round(scfg.FLOAT_COUNT * scfg.DENSITY); i++) {
-    const along = u + scfg.SPAN_START + rng() * scfg.SPAN;
+    const at = u + along(scfg.SPAN_START_UNITS + rng() * scfg.SPAN_UNITS);
     const side = (rng() > 0.5 ? nearSign : farSign) * (10 + rng() * 55);
-    const origin = offsetFromPath(along, side, 0, fy0 + rng() * (fy1 - fy0));
+    const origin = offsetFromPath(at, side, 0, fy0 + rng() * (fy1 - fy0));
     props.floatingCube(moving.brush(origin, 0, 1), { rng });
   }
 

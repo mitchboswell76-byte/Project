@@ -82,11 +82,25 @@ export const camera = {
    */
   YAW_DEG: 145,
 
+  /* Hold that yaw relative to the ROAD rather than to the world axes.
+   *
+   * Required by the closed circuit. A world-fixed rig assumes you are always
+   * travelling broadly one way; on a loop you come back the other way, the
+   * camera ends up ahead of its own direction of travel, and the shot flips
+   * through 180 degrees. Following the heading keeps the road receding the
+   * same way across the screen for the whole lap, so the camera only turns
+   * while the road turns — on a straight it is as fixed as it ever was.
+   *
+   * Set false to go back to a world-fixed rig. Only do that with an open,
+   * broadly one-way path, or the far side of the loop will play backwards. */
+  FOLLOW_PATH_HEADING: true,
+
   DISTANCE: 78, // how far back along that pitch/yaw the camera sits.
   // At FOV 30 / distance 78 the camera sees roughly 74 x 41 world units.
   // Every size below is chosen against that viewport.
 
-  LOOK_AHEAD: 0.022, // fraction of the curve to look ahead of the anchor.
+  LOOK_AHEAD: 0.01, // fraction of the curve to look ahead of the anchor.
+  // (a fraction, so it was rescaled when the circuit doubled in length)
   LOOK_HEIGHT: 2.5, // raise the look-at target off the floor.
 
   ROLL_DEG: 1.6, // peak camera roll, oscillated across the journey.
@@ -113,11 +127,19 @@ export const camera = {
 /* ------------------------------------------------------------------ */
 
 export const scroll = {
-  /* Total scrollable height, in viewport heights, per section.
-   * 4 sections x 3.2 = 12.8 screens of scrolling. */
-  HEIGHT_PER_SECTION_VH: 320,
-  LEAD_IN_VH: 140, // monument + plaza + road before section 01
-  LEAD_OUT_VH: 90, // breathing room after the last section
+  /* PACING. The route is a loop, so there is no lead-in or lead-out to size
+   * any more — what matters is how much world goes past per screen of
+   * scrolling. One lap is (path length / UNITS_PER_SCREEN) screens, which
+   * means editing PATH_POINTS re-paces the page on its own instead of
+   * silently making the journey faster. */
+  UNITS_PER_SCREEN: 87,
+
+  /* Spare scrolling at each end of the page, in viewport heights. The page
+   * holds one lap plus these; when you scroll into one, the scroll position
+   * jumps by exactly one lap. Progress is periodic with that period, so the
+   * camera does not move at all — the scrollbar wraps, the world does not.
+   * Must be at least 100 (one screen) or there is no room to wrap into. */
+  LOOP_BUFFER_VH: 120,
 
   /* GSAP ScrollTrigger scrub. `true` = frame-accurate, exactly reversible.
    * A number (0.5–1) adds smoothing at the cost of strict scrub accuracy. */
@@ -143,12 +165,22 @@ export const world = {
   FOG_FAR: 380,
 
   /* Chunk streaming: a chunk is added when the camera is within this many
-   * normalised-progress units of its anchor, and disposed beyond it. */
-  CHUNK_RADIUS: 0.16,
+   * normalised-progress units of its anchor, and disposed beyond it. It is a
+   * fraction of the whole circuit, so it was halved when the circuit went
+   * from a 1,100-unit line to a 2,300-unit loop — 0.09 is about 210 world
+   * units, comfortably more than a district's own 0.122 of content.
+   * Distance is measured the short way round the loop, not linearly. */
+  CHUNK_RADIUS: 0.09,
 
   /* Where each section sits along the normalised camera path (0 → 1).
-   * Must have one entry per section in content.js. */
-  SECTION_ANCHORS: [0.3, 0.49, 0.68, 0.87],
+   * Must have one entry per section in content.js.
+   *
+   * Side midpoints are at 0.2, 0.4, 0.6 and 0.8, and the genuinely straight
+   * part of a side runs about 0.05 either side of its midpoint. A district's
+   * copy runs FORWARD from its anchor (see LAYOUT in districts.js, which is
+   * in world units), so each anchor sits a little before its own midpoint and
+   * the copy finishes before the next corner. */
+  SECTION_ANCHORS: [0.165, 0.365, 0.565, 0.765],
 
   /* The long grey beam that runs alongside the route and carries the
    * section labels on the top face of its raised ends. */
@@ -180,23 +212,59 @@ export const world = {
    * lying on the floor. Set false to see the raw foreshortening. */
   COMPENSATE_PITCH: true,
 
-  /* The camera path control points, in world units. The route runs broadly
-   * along +X with lateral wander so the diorama never feels like a corridor.
-   * Add points to lengthen the world; SECTION_ANCHORS are fractions of it. */
+  /* The camera path control points, in world units.
+   *
+   * The route is a CLOSED CIRCUIT: a rounded pentagon, five straights joined
+   * by five corners. Scrolling past the end continues into the start with no
+   * seam, because there is no end — `path.js` closes the curve, so the join
+   * matches in both position and tangent.
+   *
+   * Five sides for four sections: each district gets a straight of its own,
+   * and the fifth carries the opening monument. Side midpoints land exactly
+   * on progress 0, 0.2, 0.4, 0.6 and 0.8 — that is five-fold symmetry, not a
+   * coincidence, so SECTION_ANCHORS below are derived from it.
+   *
+   * Keeping content on the straights matters: the camera keeps a constant
+   * angle to the ROAD (see FOLLOW_PATH_HEADING), so it only swings while the
+   * road is turning. On a straight the composition is perfectly still.
+   *
+   * Regenerate with tools/gen-circuit.py if you want a different shape. */
   PATH_POINTS: [
-    [-180, 0, 0], // 0.00  monument
-    [-95, 0, 18], // plaza + fountain
-    [-10, 0, -8], // the long straight road
-    [70, 0, 12],
-    [150, 0, 28], // 01 district
-    [250, 0, -6],
-    [340, 0, -22], // 02 district
-    [440, 0, 6],
-    [530, 0, 26], // 03 district
-    [630, 0, 0],
-    [720, 0, -18], // 04 district
-    [820, 0, 6],
-    [900, 0, 16], // outro
+    [-180, 0, 0], // side 0 MIDPOINT — progress 0, the monument straight
+    [-140, 0, 0],
+    [-59, 0, 0],
+    [22, 0, 0],
+    [88, 0, 48], // corner
+    [113, 0, 125],
+    [138, 0, 202],
+    [151, 0, 240], // side 1 MIDPOINT — district 01
+    [163, 0, 279],
+    [188, 0, 356],
+    [213, 0, 433],
+    [188, 0, 510], // corner
+    [123, 0, 558],
+    [57, 0, 606],
+    [24, 0, 629], // side 2 MIDPOINT — district 02
+    [-8, 0, 653],
+    [-74, 0, 701],
+    [-139, 0, 748],
+    [-221, 0, 748], // corner
+    [-286, 0, 701],
+    [-352, 0, 653],
+    [-384, 0, 629], // side 3 MIDPOINT — district 03
+    [-417, 0, 606],
+    [-483, 0, 558],
+    [-548, 0, 510],
+    [-573, 0, 433], // corner
+    [-548, 0, 356],
+    [-523, 0, 279],
+    [-511, 0, 240], // side 4 MIDPOINT — district 04
+    [-498, 0, 202],
+    [-473, 0, 125],
+    [-448, 0, 48],
+    [-382, 0, 0], // corner, back onto side 0
+    [-301, 0, 0],
+    [-220, 0, 0],
   ],
 };
 
@@ -215,10 +283,12 @@ export const scenery = {
   NEAR_BAND: [20, 44],
   FAR_BAND: [34, 60],
 
-  /* How far along the route a district's props are scattered, in the same
-   * normalised progress units as SECTION_ANCHORS. */
-  SPAN_START: -0.03,
-  SPAN: 0.17,
+  /* How far along the route a district's props are scattered, in WORLD
+   * UNITS from its anchor. World units, not a fraction of the route: a
+   * fraction silently re-scales every district when the path changes
+   * length, which is exactly what happened when the route became a loop. */
+  SPAN_START_UNITS: -33,
+  SPAN_UNITS: 190,
 
   DENSITY: 1, // multiplies every prop count below 1 thins the world out
 

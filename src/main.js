@@ -26,6 +26,7 @@ import {
   hex,
   overlay as overlayCfg,
   palette,
+  world as worldCfg,
 } from './config.js';
 import { progressForSection, sectionAtProgress } from './sections.js';
 import { createEntryScreen } from './ui/entry.js';
@@ -326,6 +327,10 @@ function boot() {
     audio: sound,
     setMode,
     capability,
+    /* Where the sections sit on the route. Exposed so tools/verify.mjs can
+     * drive the camera to them without keeping its own copy of the anchors,
+     * which would go stale the moment the route is re-laid out. */
+    anchors: worldCfg.SECTION_ANCHORS,
   };
 }
 

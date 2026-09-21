@@ -9,6 +9,7 @@
 
 import { world as cfg } from '../config.js';
 import { buildDistrict } from './districts.js';
+import { loopDistance, wrap } from './path.js';
 
 export function createChunkManager(scene, sections) {
   /** @type {Map<number, {objects:any[], updatables:any[]}>} */
@@ -42,9 +43,15 @@ export function createChunkManager(scene, sections) {
     for (let i = 0; i < sections.length; i++) {
       const anchor = cfg.SECTION_ANCHORS[i];
       if (anchor === undefined) continue;
-      // A district's content runs forward from its anchor, so the window is
-      // asymmetric: reach further ahead than behind.
-      const inRange = progress > anchor - cfg.CHUNK_RADIUS && progress < anchor + cfg.CHUNK_RADIUS * 1.6;
+      /* A district's content runs forward from its anchor, so the window is
+       * asymmetric: reach further ahead than behind. Both edges are measured
+       * the short way round the loop, or the district either side of the
+       * join would drop out as progress wrapped past 1. */
+      const ahead = wrap(anchor - progress); // 0 → 1 going forwards to it
+      const behind = wrap(progress - anchor);
+      const inRange =
+        (ahead <= cfg.CHUNK_RADIUS * 1.6 || behind <= cfg.CHUNK_RADIUS) &&
+        loopDistance(progress, anchor) <= cfg.CHUNK_RADIUS * 1.6;
       if (inRange) mount(i);
       else unmount(i);
     }

@@ -22,15 +22,39 @@ export function progressForSection(i) {
  *
  * A section takes over halfway between its anchor and the next one, so the
  * highlight changes at a sensible midpoint rather than only once the camera
- * is exactly on the anchor. Before the first anchor the first section is
- * current — there is no unnamed state in the nav.
+ * is exactly on the anchor.
+ *
+ * The route is a loop, so this is circular: the last section holds until the
+ * midpoint between it and the FIRST anchor, measured forwards across the
+ * join. That is why it is written as "which anchor is closest behind me"
+ * rather than as a linear scan — a linear scan leaves the stretch before the
+ * first anchor and after the last one unnamed, and on a loop that stretch is
+ * one continuous piece of route, not two ends.
  */
 export function sectionAtProgress(p) {
   const a = world.SECTION_ANCHORS;
+  if (!a.length) return 0;
+
+  const wrapped = ((p % 1) + 1) % 1;
   let index = 0;
-  for (let i = 1; i < a.length; i++) {
-    const boundary = (a[i - 1] + a[i]) / 2;
-    if (p >= boundary) index = i;
+  let best = Infinity;
+
+  const loop = (v) => ((v % 1) + 1) % 1;
+
+  for (let i = 0; i < a.length; i++) {
+    /* This section takes over halfway back to the PREVIOUS anchor. That gap
+     * is not the same as the gap to the next one — the stretch from the last
+     * section round to the first carries the monument and is twice as long —
+     * so the two must not be used interchangeably. */
+    const prev = a[(i - 1 + a.length) % a.length];
+    const span = loop(a[i] - prev);
+    const takeover = loop(a[i] - span / 2);
+    // How far forward of that takeover point we are; the smallest wins.
+    const since = loop(wrapped - takeover);
+    if (since < best) {
+      best = since;
+      index = i;
+    }
   }
   return index;
 }

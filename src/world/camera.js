@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { camera as cfg } from '../config.js';
-import { pointAt } from './path.js';
+import { cameraYawAt, pointAt, wrap } from './path.js';
 
 export const FOV = cfg.FOV;
 export const PITCH_DEG = cfg.PITCH_DEG;
@@ -32,16 +32,20 @@ export const ROLL_DEG = cfg.ROLL_DEG;
 const DEG = Math.PI / 180;
 
 /**
- * World-fixed offset from a path point to the camera.
+ * Offset from a path point to the camera.
  *
- * The route runs broadly along +X, so the camera sits BEHIND it (-X) and to
- * the +Z side, above, looking forward down the route. PITCH raises it;
- * YAW swings it around the vertical. Both positive values read as you'd
- * expect, which is why the X term is negated here.
+ * The camera sits BEHIND the direction of travel and to one side, above,
+ * looking forward down the route. PITCH raises it; YAW swings it around the
+ * vertical. Both positive values read as you'd expect, which is why the X
+ * term is negated here.
+ *
+ * `yaw` comes from cameraYawAt(), so on the closed circuit the whole rig
+ * turns with the road and the composition holds all the way round. Pass the
+ * yaw in rather than reading it here: the intro driver needs the same offset
+ * for a specific point on the route.
  */
-function rigOffset(distance = cfg.DISTANCE, target = new THREE.Vector3()) {
+function rigOffset(distance = cfg.DISTANCE, target = new THREE.Vector3(), yaw = cfg.YAW_DEG * DEG) {
   const pitch = cfg.PITCH_DEG * DEG;
-  const yaw = cfg.YAW_DEG * DEG;
   const horizontal = Math.cos(pitch) * distance;
   return target.set(
     -Math.sin(yaw) * horizontal,
@@ -52,7 +56,7 @@ function rigOffset(distance = cfg.DISTANCE, target = new THREE.Vector3()) {
 
 export function createCamera(aspect) {
   const cam = new THREE.PerspectiveCamera(cfg.FOV, aspect, cfg.NEAR, cfg.FAR);
-  cam.position.copy(rigOffset());
+  cam.position.copy(rigOffset(cfg.DISTANCE, new THREE.Vector3(), cameraYawAt(0)));
   return cam;
 }
 
@@ -73,13 +77,17 @@ const _up = new THREE.Vector3();
  * @param {number} distanceScale 1 = normal; <1 pulls in for the intro flight
  */
 export function applyProgress(cam, progress, distanceScale = 1) {
-  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  // WRAPPED, not clamped: the route is a loop, so progress 1.02 is 0.02 and
+  // scrolling past the end simply continues. Still a pure function of
+  // progress — wrapping accumulates nothing — so scrubbing back up the page
+  // reproduces every transform exactly.
+  const p = wrap(progress);
 
   pointAt(p, _anchor);
-  rigOffset(cfg.DISTANCE * distanceScale, _offset);
+  rigOffset(cfg.DISTANCE * distanceScale, _offset, cameraYawAt(p));
   cam.position.copy(_anchor).add(_offset);
 
-  pointAt(Math.min(p + cfg.LOOK_AHEAD, 1), _look);
+  pointAt(p + cfg.LOOK_AHEAD, _look);
   _look.y += cfg.LOOK_HEIGHT;
 
   // Roll: tilt `up` around the view direction. Oscillated so the journey
@@ -114,8 +122,10 @@ export function applyProgress(cam, progress, distanceScale = 1) {
  */
 export function makeIntroDriver(cam, monument = null) {
   /* Where the camera ends up: the ordinary rig at progress 0. */
-  const rest = pointAt(0, new THREE.Vector3()).add(rigOffset(cfg.DISTANCE, new THREE.Vector3()));
-  const restLook = pointAt(Math.min(cfg.LOOK_AHEAD, 1), new THREE.Vector3());
+  const rest = pointAt(0, new THREE.Vector3()).add(
+    rigOffset(cfg.DISTANCE, new THREE.Vector3(), cameraYawAt(0))
+  );
+  const restLook = pointAt(cfg.LOOK_AHEAD, new THREE.Vector3());
   restLook.y += cfg.LOOK_HEIGHT;
 
   if (!monument) {
