@@ -171,7 +171,13 @@ function boot() {
         overlay.setSound(on);
         sound.play('sfx-toggle');
       },
+      onZoomChange: (direction) => {
+        if (!world) return;
+        overlay.setZoom(world.stepZoom(direction));
+      },
     });
+
+    if (world) overlay.setZoom(world.zoomState());
 
     // Without WebGL there is no 3D to go back to; say so rather than
     // offering a button that would do nothing.

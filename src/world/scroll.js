@@ -107,18 +107,23 @@ export function createScrollDriver({ spacer, onProgress }) {
       p: from + delta,
       duration,
       ease: cfg.NAV_JUMP_EASE,
-      onUpdate: () => {
-        state.progress = wrap(tween.p);
-        setScroll(pixelsFor(state.progress));
-        onProgress(state.progress);
-      },
+      onUpdate: () => jumpTo(tween.p),
     });
   }
 
-  /** Jump without animating — used when returning from 2D mode. */
+  /**
+   * Jump without animating — used when returning from 2D mode.
+   *
+   * Progress is taken from the pixel actually scrolled to, not from the value
+   * asked for. Scroll positions are whole pixels, so the two differ slightly;
+   * storing the exact request means a later scroll event re-derives a very
+   * slightly different progress from the same position, and the camera
+   * transform stops being reproducible.
+   */
   function jumpTo(progress) {
-    state.progress = wrap(progress);
-    setScroll(pixelsFor(state.progress));
+    const y = Math.round(pixelsFor(progress));
+    setScroll(y);
+    state.progress = wrap((y - bufferPx()) / lapPx());
     onProgress(state.progress);
   }
 

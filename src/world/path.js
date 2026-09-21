@@ -5,12 +5,13 @@
  * the beam, the chunks and the camera all read from it, so the world can be
  * relaid out entirely by editing world.PATH_POINTS in config.js.
  *
- * The curve is CLOSED. Progress 1 is progress 0 — the same point, with the
- * same tangent — so the journey has no end to fall off. Everything here
- * therefore WRAPS progress rather than clamping it: `wrap(1.02)` is 0.02, and
- * a section at 0.97 whose copy runs 0.12 further simply continues past the
- * join. Clamping instead would pile the whole tail of the world onto one
- * point, which is what the old open curve did at its ends.
+ * The curve is OPEN and runs broadly one way, like a long page rather than a
+ * track: the world always flows the same direction down the screen. Progress
+ * still WRAPS rather than clamping — `wrap(1.02)` is 0.02 — so scrolling past
+ * the end returns you to the beginning instead of piling the tail of the
+ * world onto one point. That return is a cut, not a seam: the two ends are
+ * different places. Both are built dead straight on the same heading and kept
+ * clear of landmarks so the shot does not change shape across it.
  */
 
 import * as THREE from 'three';
@@ -19,12 +20,19 @@ import { camera as cameraCfg, world as cfg } from '../config.js';
 const points = cfg.PATH_POINTS.map(([x, y, z]) => new THREE.Vector3(x, y, z));
 
 /* centripetal Catmull-Rom avoids the cusps and overshoot that 'chordal' and
- * uniform produce on unevenly spaced control points. `true` closes the loop:
- * three.js joins the last control point back to the first and keeps the
- * tangent continuous across the join, so there is no kink to hide. */
-export const curve = new THREE.CatmullRomCurve3(points, true, 'centripetal', 0.5);
+ * uniform produce on unevenly spaced control points. NOT closed: closing it
+ * would run a straight return leg back across the whole world, which doubles
+ * the length and puts a 2,700-unit empty dash in the middle of the journey. */
+export const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
 
-/** Fold any progress value onto the loop. Pure, and total: wrap(-0.1) = 0.9. */
+/**
+ * Fold any progress value onto the route. Pure, and total: wrap(-0.1) = 0.9.
+ *
+ * NOTE that wrap(1) is 0. That is right for PROGRESS — scrolling past the end
+ * returns you to the start — but it means `pointAt(1)` gives you the first
+ * point of the curve, not the last. Anything that wants the route's actual
+ * end has to ask for it by name: see `routeEnd` below.
+ */
 export const wrap = (u) => {
   const t = u % 1;
   return t < 0 ? t + 1 : t;
@@ -117,3 +125,14 @@ export function cameraYawAt(u) {
 }
 
 export const totalLength = curve.getLength();
+
+/**
+ * The very last point of the route, and the direction it is heading there.
+ *
+ * Computed once, directly off the curve, because `pointAt(1)` wraps to the
+ * beginning. The camera needs these to keep looking FORWARD as it runs off
+ * the end of the route rather than swinging round to stare back at the start,
+ * which is what it did until this existed.
+ */
+export const routeEnd = curve.getPointAt(1, new THREE.Vector3());
+export const routeEndTangent = curve.getTangentAt(1, new THREE.Vector3()).normalize();

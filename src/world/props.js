@@ -282,7 +282,9 @@ export function rainbowArch(paint) {
     const r = 9.5 + b * 1.25;
     for (let i = 0; i <= steps; i++) {
       const a = (i / steps) * Math.PI;
-      paint(Math.cos(a) * r, Math.sin(a) * r, 0, 1.3, 1.3, 1.6, colour);
+      // +0.65 lifts the ends of the arc so its lowest cubes rest on the
+      // ground rather than half-buried in it.
+      paint(Math.cos(a) * r, Math.sin(a) * r + 0.65, 0, 1.3, 1.3, 1.6, colour);
     }
   });
 }
@@ -388,7 +390,7 @@ export function latticeTower(paint, { rng } = {}) {
   for (let i = 0; i < SEGMENTS; i++) {
     const t = i / SEGMENTS;
     const spread = 9.5 * (1 - t) ** 1.6 + 1.1;
-    const y = 2 + t * 30;
+    const y = 1.2 + t * 30; // legs start ON the ground, not 0.8 above it
     const thick = 1.5 - t * 0.7;
     for (const [sx, sz] of LEGS) {
       paint(sx * spread, y, sz * spread, thick, 2.4, thick, metal);
@@ -425,7 +427,7 @@ export function ferrisWheel(paint, { rng, animPaint } = {}) {
   for (const sx of [-1, 1]) {
     for (let i = 0; i < 9; i++) {
       const t = i / 8;
-      paint(sx * (6.5 - t * 6), 1.5 + t * hub, 0, 1.3, 2.6, 1.3, metal);
+      paint(sx * (6.5 - t * 6), 1.3 + t * hub, 0, 1.3, 2.6, 1.3, metal);
     }
   }
   paint(0, hub, 0, 2.4, 2.4, 4.2, metal);
@@ -458,7 +460,7 @@ export function ferrisWheel(paint, { rng, animPaint } = {}) {
 export function windmill(paint, { rng } = {}) {
   for (let i = 0; i < 7; i++) {
     const w = 7.5 - i * 0.55;
-    paint(0, 1.6 + i * 3, 0, w, 3, w, i % 2 ? P.sand : P.metal);
+    paint(0, 1.5 + i * 3, 0, w, 3, w, i % 2 ? P.sand : P.metal);
   }
   paint(0, 23.5, 0, 6.2, 3.2, 6.2, P.roof);
   paint(0, 26, 0, 3.4, 2, 3.4, P.roof);
@@ -647,7 +649,7 @@ export function grazer(paint, { rng } = {}) {
   paint(0, 3.2, 0, 2.8, 2.6, 5.4, coat);
   paint(0.8, 3.6, 0.6, 1.4, 1.2, 1.6, spot);
   for (const sz of [-1.8, 1.8]) {
-    for (const sx of [-0.9, 0.9]) paint(sx, 1.5, sz, 0.8, 3.2, 0.8, coat);
+    for (const sx of [-0.9, 0.9]) paint(sx, 1.6, sz, 0.8, 3.2, 0.8, coat);
   }
   // Neck, sloping forward and down.
   for (let i = 0; i < 5; i++) {
@@ -708,6 +710,155 @@ export function bench(paint, { rng } = {}) {
   paint(0, 0.5, 0, 3.2, 0.3, 1.0, wood);
   paint(0, 1.0, -0.42, 3.2, 1.0, 0.25, wood);
   for (const sx of [-1.3, 1.3]) paint(sx, 0.25, 0, 0.3, 0.5, 0.9, P.metal);
+}
+
+/* ------------------------------------------------------------------ */
+/* Street level                                                        */
+/* ------------------------------------------------------------------ */
+/* Everything here stands ON the ground: the lowest cube's bottom face is
+ * at local y = 0, so the brush puts it exactly on the surface. Anything
+ * meant to be in the air (cloud, balloon, floatingCube) says so by being
+ * placed at a height, never by being modelled floating. */
+
+/** A small car. Runs along its own +z. */
+export function car(paint, { rng } = {}) {
+  const paintwork = accent(rng);
+  const glass = palette.grid;
+  for (const z of [-1.4, 1.4]) {
+    for (const x of [-0.85, 0.85]) paint(x, 0.45, z, 0.32, 0.9, 0.9, palette.background);
+  }
+  paint(0, 0.95, 0, 1.9, 0.9, 4.2, paintwork);
+  paint(0, 1.62, -0.25, 1.7, 0.7, 2.1, paintwork);
+  paint(0, 1.62, -0.25, 1.78, 0.42, 1.9, glass);
+  paint(0, 1.05, 2.15, 1.6, 0.4, 0.2, P.snow); // lights
+  paint(0, 1.05, -2.15, 1.5, 0.35, 0.2, P.roof);
+  paint(0, 0.5, 0, 2.0, 0.25, 4.0, palette.background); // shadow line under
+}
+
+/** A motorbike, on its stand. */
+export function motorbike(paint, { rng } = {}) {
+  const paintwork = accent(rng);
+  for (const z of [-0.95, 0.95]) paint(0, 0.42, z, 0.26, 0.84, 0.84, palette.background);
+  paint(0, 0.85, 0, 0.34, 0.5, 1.9, P.metal);
+  paint(0, 1.18, 0.15, 0.6, 0.55, 0.9, paintwork); // tank
+  paint(0, 1.2, -0.62, 0.62, 0.3, 0.8, palette.background); // seat
+  paint(0, 1.52, 0.72, 1.06, 0.16, 0.16, P.metal); // bars
+  paint(0, 1.28, 0.95, 0.32, 0.32, 0.22, palette.accents[1]); // headlight
+  paint(0.3, 0.3, -0.3, 0.12, 0.6, 0.12, P.metal); // stand
+}
+
+/**
+ * An oversized shoe, as a piece of public sculpture. Scaled up in the
+ * presets — at its natural size it is a shoe someone left behind.
+ */
+export function shoe(paint, { rng } = {}) {
+  const upper = accent(rng);
+  paint(0, 0.22, 0, 1.5, 0.44, 4.0, P.snow); // sole
+  paint(0, 0.62, -0.5, 1.42, 0.5, 3.0, upper);
+  paint(0, 1.05, -1.0, 1.3, 0.5, 2.0, upper);
+  paint(0, 1.45, -1.45, 1.1, 0.5, 1.1, upper); // heel collar
+  paint(0, 1.0, 0.35, 0.9, 0.55, 1.2, P.sand); // tongue
+  for (let i = 0; i < 3; i++) paint(0, 1.12 + i * 0.02, 0.1 - i * 0.55, 1.0, 0.16, 0.16, P.snow);
+}
+
+/** A multi-storey block: the tallest ordinary building. */
+export function towerBlock(paint, { rng } = {}) {
+  const storeys = 4 + ((rng() * 3) | 0);
+  const w = 5 + rng() * 2.5;
+  const d = 4.5 + rng() * 2;
+  const wall = rng() > 0.5 ? P.sand : P.metal;
+  for (let i = 0; i < storeys; i++) {
+    paint(0, 1.4 + i * 2.8, 0, w, 2.8, d, wall);
+    // window band, inset a touch on all four faces
+    paint(0, 2.1 + i * 2.8, 0, w + 0.06, 0.9, d * 0.62, palette.grid);
+    paint(0, 2.1 + i * 2.8, 0, w * 0.62, 0.9, d + 0.06, palette.grid);
+  }
+  paint(0, 1.4 + storeys * 2.8, 0, w + 0.7, 0.5, d + 0.7, P.roof);
+  paint(w * 0.25, 2.1 + storeys * 2.8, 0, 1.0, 1.2, 1.0, P.metal);
+  paint(0, 0.35, d / 2 + 0.1, 1.2, 0.7, 0.2, P.trunk); // door
+}
+
+/** A shop with a striped awning and a sign over the door. */
+export function shop(paint, { rng } = {}) {
+  const wall = rng() > 0.5 ? P.wall : P.snow;
+  const trim = accent(rng);
+  paint(0, 1.7, 0, 6.4, 3.4, 4.6, wall);
+  paint(0, 3.6, 0, 6.9, 0.5, 5.0, P.roof);
+  paint(0, 4.05, 0, 5.2, 0.4, 3.8, P.roof);
+  // Awning: alternating stripes, sloping out over the pavement.
+  for (let i = 0; i < 7; i++) {
+    paint(-2.7 + i * 0.9, 2.6, 2.75, 0.9, 0.3, 1.4, i % 2 ? trim : P.snow);
+  }
+  paint(0, 2.05, 2.35, 5.6, 0.7, 0.2, trim); // sign band
+  paint(0, 2.05, 2.28, 4.4, 0.3, 0.12, palette.ink);
+  paint(-1.6, 0.9, 2.32, 1.6, 1.8, 0.2, palette.grid); // window
+  paint(1.7, 0.85, 2.32, 1.2, 1.7, 0.2, P.trunk); // door
+}
+
+/** A kiosk: a little stall with a canopy and a counter. */
+export function kiosk(paint, { rng } = {}) {
+  const trim = accent(rng);
+  paint(0, 1.1, 0, 3.2, 2.2, 2.4, P.sand);
+  paint(0, 2.35, 0, 3.8, 0.35, 3.0, trim);
+  paint(0, 2.65, 0, 2.2, 0.3, 1.8, trim);
+  paint(0, 1.55, 1.3, 3.0, 0.25, 0.7, P.trunk); // counter
+  for (const sx of [-1.4, 1.4]) paint(sx, 0.85, 1.25, 0.2, 1.7, 0.2, P.metal);
+  paint(0, 1.0, 0, 2.4, 1.2, 0.2, palette.grid);
+  if (rng() > 0.5) paint(1.0, 2.9, 0, 0.5, 0.5, 0.5, accent(rng));
+}
+
+/** A bus shelter. */
+export function busStop(paint, { rng } = {}) {
+  paint(0, 1.4, 0, 0.25, 2.8, 0.25, P.metal);
+  paint(0.9, 1.4, -1.4, 0.25, 2.8, 0.25, P.metal);
+  paint(0.9, 1.4, 1.4, 0.25, 2.8, 0.25, P.metal);
+  paint(0.55, 2.9, 0, 2.2, 0.28, 3.2, accent(rng));
+  paint(1.0, 1.5, 0, 0.16, 2.2, 3.0, palette.grid); // back panel
+  paint(0.6, 0.62, 0, 1.0, 0.24, 2.2, P.trunk); // bench
+  paint(-0.1, 2.4, 0, 0.8, 0.9, 0.16, palette.accents[3]); // timetable
+}
+
+/** A litter bin. */
+export function bin(paint, { rng } = {}) {
+  paint(0, 0.55, 0, 0.9, 1.1, 0.9, rng() > 0.5 ? P.leafDark : P.metal);
+  paint(0, 1.18, 0, 1.0, 0.16, 1.0, P.metal);
+}
+
+/** A stack of crates. */
+export function crates(paint, { rng } = {}) {
+  const n = 2 + ((rng() * 4) | 0);
+  for (let i = 0; i < n; i++) {
+    const s = 0.9 + rng() * 0.5;
+    paint((rng() - 0.5) * 1.4, s / 2 + (i % 2) * s, (rng() - 0.5) * 1.4, s, s, s, rng() > 0.6 ? accent(rng) : P.trunk);
+  }
+}
+
+/** A dog, trotting. */
+export function dog(paint, { rng } = {}) {
+  const coat = rng() > 0.5 ? P.trunk : P.sand;
+  paint(0, 0.85, 0, 0.7, 0.75, 1.7, coat);
+  for (const z of [-0.55, 0.55]) {
+    for (const x of [-0.26, 0.26]) paint(x, 0.24, z, 0.22, 0.48, 0.22, coat);
+  }
+  paint(0, 1.35, 0.85, 0.6, 0.6, 0.7, coat);
+  paint(0, 1.2, 1.25, 0.35, 0.3, 0.3, palette.background);
+  for (const sx of [-0.24, 0.24]) paint(sx, 1.72, 0.8, 0.22, 0.34, 0.16, coat);
+  paint(0, 1.35, -0.95, 0.2, 0.55, 0.2, coat);
+}
+
+/** A market stall with a striped roof and goods on the table. */
+export function stall(paint, { rng } = {}) {
+  const trim = accent(rng);
+  for (const sx of [-1.6, 1.6]) {
+    for (const sz of [-1.1, 1.1]) paint(sx, 1.0, sz, 0.18, 2.0, 0.18, P.trunk);
+  }
+  for (let i = 0; i < 6; i++) {
+    paint(-1.75 + i * 0.7, 2.15, 0, 0.7, 0.3, 2.8, i % 2 ? trim : P.snow);
+  }
+  paint(0, 1.25, 0, 3.6, 0.22, 2.2, P.trunk);
+  for (let i = 0; i < 5; i++) {
+    paint(-1.4 + i * 0.7, 1.55, (rng() - 0.5) * 1.2, 0.5, 0.45, 0.5, accent(rng));
+  }
 }
 
 /* Natural height of each landmark, in world units. districts.js scales

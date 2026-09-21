@@ -99,7 +99,16 @@ export function createWorld(canvas) {
   }
 
   /* ---------------- loop ---------------- */
-  const state = { progress: 0, intro: 1, running: false };
+  const state = {
+    progress: 0,
+    intro: 1,
+    running: false,
+    /* Camera zoom, as an index into camera.ZOOM_STEPS. Held here rather than
+     * in the camera module so it survives a resize and so applyProgress stays
+     * a pure function of (progress, zoom). */
+    zoom: camCfg.ZOOM_DEFAULT,
+  };
+  const zoomScale = () => camCfg.ZOOM_STEPS[state.zoom] ?? 1;
   const driveIntro = makeIntroDriver(cam, monumentInfo);
   let raf = 0;
   let last = performance.now();
@@ -112,7 +121,7 @@ export function createWorld(canvas) {
     if (state.intro < 1) {
       driveIntro(state.intro);
     } else {
-      applyProgress(cam, state.progress);
+      applyProgress(cam, state.progress, zoomScale());
     }
 
     followGround(state.intro < 1 ? 0 : state.progress);
@@ -138,7 +147,7 @@ export function createWorld(canvas) {
     /** Build every chunk once so nothing pops in on first scroll. */
     warm() {
       chunks.mountAll();
-      applyProgress(cam, 0);
+      applyProgress(cam, 0, zoomScale());
       renderer.render(scene, cam);
     },
 
@@ -160,13 +169,39 @@ export function createWorld(canvas) {
 
     getProgress: () => state.progress,
 
-    /** 0 → 1 drives the Enter fly-through; 1 hands control back to scroll. */
+    /**
+     * Step the zoom. `direction` is +1 to pull back, -1 to move in.
+     * Returns where the range now stands so the overlay can grey out a
+     * button at either end.
+     */
+    stepZoom(direction) {
+      const last = camCfg.ZOOM_STEPS.length - 1;
+      state.zoom = Math.max(0, Math.min(last, state.zoom + direction));
+      applyProgress(cam, state.progress, zoomScale());
+      return { atMin: state.zoom === 0, atMax: state.zoom === last };
+    },
+
+    zoomState() {
+      const last = camCfg.ZOOM_STEPS.length - 1;
+      return { atMin: state.zoom === 0, atMax: state.zoom === last };
+    },
+
+    /**
+     * 0 → 1 drives the Enter fly-through; 1 hands control back to scroll.
+     *
+     * Applies immediately rather than waiting for the next rendered frame, so
+     * setting it and reading the camera in the same tick agrees with what the
+     * next frame will draw.
+     */
     setIntro(k) {
       state.intro = k;
-      if (k >= 1) {
-        cam.fov = camCfg.FOV;
-        cam.updateProjectionMatrix();
+      if (k < 1) {
+        driveIntro(k);
+        return;
       }
+      cam.fov = camCfg.FOV;
+      cam.updateProjectionMatrix();
+      applyProgress(cam, state.progress, zoomScale());
     },
 
     /** Draw calls and triangles for the current frame — used in the perf pass. */

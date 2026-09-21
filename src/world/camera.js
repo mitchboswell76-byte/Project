@@ -20,7 +20,14 @@
 
 import * as THREE from 'three';
 import { camera as cfg } from '../config.js';
-import { cameraYawAt, pointAt, wrap } from './path.js';
+import {
+  cameraYawAt,
+  pointAt,
+  routeEnd,
+  routeEndTangent,
+  totalLength,
+  wrap,
+} from './path.js';
 
 export const FOV = cfg.FOV;
 export const PITCH_DEG = cfg.PITCH_DEG;
@@ -62,6 +69,23 @@ export function createCamera(aspect) {
 
 const _anchor = new THREE.Vector3();
 const _look = new THREE.Vector3();
+
+/**
+ * Where the camera looks from a given progress: a little further along the
+ * route.
+ *
+ * Past the end of the route that point is EXTRAPOLATED along the final
+ * tangent rather than wrapped. Wrapping it sends the look target to the start
+ * of the route — thousands of units away — so for the last fraction of the
+ * journey the camera swings round and stares back across the whole world.
+ * The route ends dead straight, so extrapolating is exact.
+ */
+function lookTarget(p, target) {
+  const ahead = p + cfg.LOOK_AHEAD;
+  if (ahead < 1) return pointAt(ahead, target);
+  // routeEnd, not pointAt(1): that wraps to the start of the route.
+  return target.copy(routeEnd).addScaledVector(routeEndTangent, (ahead - 1) * totalLength);
+}
 const _offset = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3();
@@ -87,7 +111,7 @@ export function applyProgress(cam, progress, distanceScale = 1) {
   rigOffset(cfg.DISTANCE * distanceScale, _offset, cameraYawAt(p));
   cam.position.copy(_anchor).add(_offset);
 
-  pointAt(p + cfg.LOOK_AHEAD, _look);
+  lookTarget(p, _look);
   _look.y += cfg.LOOK_HEIGHT;
 
   // Roll: tilt `up` around the view direction. Oscillated so the journey
@@ -125,7 +149,7 @@ export function makeIntroDriver(cam, monument = null) {
   const rest = pointAt(0, new THREE.Vector3()).add(
     rigOffset(cfg.DISTANCE, new THREE.Vector3(), cameraYawAt(0))
   );
-  const restLook = pointAt(cfg.LOOK_AHEAD, new THREE.Vector3());
+  const restLook = lookTarget(0, new THREE.Vector3());
   restLook.y += cfg.LOOK_HEIGHT;
 
   if (!monument) {

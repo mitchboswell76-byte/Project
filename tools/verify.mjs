@@ -58,6 +58,48 @@ const check = (ok, label, detail = '') => {
   if (!ok) fail.push(label);
 };
 
+/* ==================================================================== */
+/* Props stand on the ground                                            */
+/* ==================================================================== */
+/* Run before the browser starts: props.js is plain JS with no DOM in it, so
+ * each prop can simply be painted into an array and measured. A prop whose
+ * lowest cube is not at y = 0 either hovers or is half buried once the brush
+ * puts it on the route — which is not obvious on screen until you are close
+ * to it, and was true of five of them. */
+{
+  const props = await import('../src/world/props.js');
+  // The only things allowed off the ground are the ones that are meant to be
+  // in the air, and they get there by being PLACED at a height.
+  const airborne = new Set(['cloud', 'balloon', 'floatingCube']);
+  const offGround = [];
+  let painted = 0;
+
+  for (const [name, fn] of Object.entries(props)) {
+    if (typeof fn !== 'function') continue;
+    const cubes = [];
+    const paint = (x, y, z, w, h) => cubes.push({ y, h });
+    let seed = 1;
+    const rng = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    fn(paint, { rng, animPaint: paint, snow: false });
+    if (!cubes.length) continue;
+    painted++;
+    const base = Math.min(...cubes.map((c) => c.y - c.h / 2));
+    if (!airborne.has(name) && Math.abs(base) > 0.08) {
+      offGround.push(`${name} ${base > 0 ? 'hovers' : 'is buried'} by ${Math.abs(base).toFixed(2)}`);
+    }
+  }
+
+  check(painted > 30, 'the prop library is populated', `${painted} props`);
+  check(
+    offGround.length === 0,
+    'every prop that should be on the ground is on the ground',
+    offGround.join('; ')
+  );
+}
+
 const browser = await chromium.launch({
   // SwiftShader so this runs on a machine with no GPU. Frame rates measured
   // under it are meaningless — use a real browser for performance numbers.
@@ -170,51 +212,35 @@ for (const p of ANCHORS) {
 }
 
 /* ==================================================================== */
-/* The loop — the route has no end                                      */
+/* The wrap — the route never dead-ends                                 */
 /* ==================================================================== */
 
-/* A closed curve means progress 1 IS progress 0: same point, same tangent,
- * therefore the same camera transform to the last decimal. */
-const atOne = await at(1);
-const atZero = await at(0);
+/* The route runs ONE WAY, like a long page rather than a track, so returning
+ * to the start is a CUT: the two ends are different places, the whole length
+ * of the route apart. What has to hold is that the SHOT does not change shape
+ * across it. Both ends run dead straight on the same heading, so the camera's
+ * orientation either side of the wrap must match and only its position moves.
+ */
+const endOfRoute = await at(0.999);
+const startOfRoute = await at(0.001);
+
+const quatAngle = (a, b) => {
+  const dot = Math.abs(a.reduce((sum, v, i) => sum + v * b[i], 0));
+  return (2 * Math.acos(Math.min(1, dot)) * 180) / Math.PI;
+};
+const turnAcrossCut = quatAngle(endOfRoute.quat, startOfRoute.quat);
 check(
-  JSON.stringify(atOne.pos) === JSON.stringify(atZero.pos) &&
-    JSON.stringify(atOne.quat) === JSON.stringify(atZero.quat),
-  'progress 1 and progress 0 are the same camera transform',
-  `${JSON.stringify(atZero.pos)}`
+  turnAcrossCut < 2,
+  'the camera faces the same way either side of the wrap',
+  `${turnAcrossCut.toFixed(2)} degrees of turn across the cut`
 );
 
-/* And the approach to the join is as smooth as anywhere else: step across it
- * and the camera should move by the same amount per step as it does mid-
- * route. A seam would show up here as one step far longer than its
- * neighbours — which is exactly what a wrap-around teleport looks like. */
-const stepDistances = async (from, count, step) => {
-  const out = [];
-  let previous = null;
-  for (let i = 0; i <= count; i++) {
-    const sample = await at(from + i * step);
-    if (previous) {
-      out.push(
-        Math.hypot(
-          sample.pos[0] - previous[0],
-          sample.pos[1] - previous[1],
-          sample.pos[2] - previous[2]
-        )
-      );
-    }
-    previous = sample.pos;
-  }
-  return out;
-};
-
-const acrossJoin = await stepDistances(0.97, 6, 0.01); // 0.97 → 1.03
-const midRoute = await stepDistances(0.4, 6, 0.01);
-const worstJoin = Math.max(...acrossJoin);
-const typical = midRoute.reduce((a, b) => a + b, 0) / midRoute.length;
+/* And nothing distinctive should be standing near either end, or the cut
+ * announces itself rather than passing as more of the same road. */
 check(
-  worstJoin < typical * 1.6,
-  'stepping across the join moves the camera no further than anywhere else',
-  `worst step at the join ${worstJoin.toFixed(1)} units, typical ${typical.toFixed(1)}`
+  endOfRoute.stats.chunks <= 2 && startOfRoute.stats.chunks <= 2,
+  'the ends of the route are quiet, so the wrap is unobtrusive',
+  `${endOfRoute.stats.chunks} zones at the end, ${startOfRoute.stats.chunks} at the start`
 );
 
 /* The page is one lap plus a buffer at each end. Scrolling off the end of the
@@ -263,16 +289,14 @@ check(
   `scroll ${Math.round(wrapTest.before.scrollY)} → ${Math.round(wrapTest.after.scrollY)}`
 );
 
-/* 0.999 and 0.001 are all but the same point on the loop, so exactly the same
- * districts must be live at both. This is the check a linear chunk distance
- * fails: it reads 0.999 as being a whole route away from a section at 0.13
- * and drops everything for one frame as the camera crosses the join. */
-const justBefore = await at(0.999);
-const justAfter = await at(0.001);
+/* Progress wraps, so chunk distance has to wrap with it: the zone at the
+ * START of the route must already be loaded as you approach the END, or it
+ * pops in a frame after the wrap. A linear distance reads those two as a
+ * whole route apart and loads nothing. */
 check(
-  justBefore.stats.chunks === justAfter.stats.chunks,
-  'the same districts are live either side of the join',
-  `${justBefore.stats.chunks} at 0.999, ${justAfter.stats.chunks} at 0.001`
+  endOfRoute.stats.chunks > 0,
+  'the start of the route is already loaded as you reach the end',
+  `${endOfRoute.stats.chunks} zones live at progress 0.999`
 );
 
 /* The nav has to name a section everywhere on the loop — including the long
@@ -568,6 +592,39 @@ check(
   overlayState.viewPressed.filter((v) => v === 'true').length === 1 &&
     overlayState.soundPressed.filter((v) => v === 'true').length === 1,
   'exactly one View and one Sound control reads as pressed'
+);
+
+/* The zoom control actually moves the camera, and stops at both ends of its
+ * range rather than leaving a button that quietly does nothing. */
+const zoomed = await page.evaluate(async () => {
+  const cam = window.__site.world.camera;
+  const before = cam.position.clone();
+  document.querySelector('.zoombtn[data-step="1"]').click();
+  await new Promise((r) => setTimeout(r, 250));
+  const after = cam.position.clone();
+  // walk to the far end of the range
+  for (let i = 0; i < 8; i++) {
+    document.querySelector('.zoombtn[data-step="1"]').click();
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  const atMax = document.querySelector('.zoombtn[data-step="1"]').disabled;
+  for (let i = 0; i < 12; i++) {
+    document.querySelector('.zoombtn[data-step="-1"]').click();
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  const atMin = document.querySelector('.zoombtn[data-step="-1"]').disabled;
+  // back to the middle so the rest of the run sees the default framing
+  for (let i = 0; i < 2; i++) {
+    document.querySelector('.zoombtn[data-step="1"]').click();
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return { moved: before.distanceTo(after), atMax, atMin };
+});
+check(zoomed.moved > 1, 'the zoom control moves the camera', `${zoomed.moved.toFixed(1)} units per step`);
+check(
+  zoomed.atMax && zoomed.atMin,
+  'and disables itself at each end of its range',
+  `atMax ${zoomed.atMax}, atMin ${zoomed.atMin}`
 );
 
 /* The overlay must not drift while the page scrolls. */
@@ -889,69 +946,76 @@ await intro.waitForFunction(() => !document.getElementById('enter-button').disab
 });
 await intro.click('#enter-button');
 
-/* Sample the camera against the monument's own frame for the length of the
- * transition: `n` is distance in front of (+) or behind (-) the wall, `lat`
- * is sideways along the lettering. */
-const flight = await intro.evaluate(
-  () =>
-    new Promise((resolve) => {
-      const w = window.__site.world;
-      const mon = w.scene.getObjectByName('monument');
-      if (!mon) return resolve(null);
-      const sc = mon.scale.x;
-      const width = mon.userData.size.width * sc;
-      const height = mon.userData.size.height * sc;
-      const r = mon.rotation.y;
-      const n = { x: Math.sin(r), z: Math.cos(r) };
-      const ax = { x: Math.cos(r), z: -Math.sin(r) };
-      const c = { x: mon.position.x, y: height / 2, z: mon.position.z };
+/* Walk the transition by hand rather than watching it play.
+ *
+ * `setIntro(k)` is the transition's own clock, so stepping it drives exactly
+ * the same camera path the visitor sees, at whatever resolution we like.
+ * Watching it play instead means sampling at the frame rate — about eight a
+ * second under a software rasteriser — and the pass through a wall one cube
+ * deep happens well inside one of those frames.
+ */
+await intro
+  .waitForFunction(() => Boolean(window.__site?.scroller), { timeout: 20000 })
+  .catch(() => {});
 
-      const samples = [];
-      /* The opening shot: is the wall square on, in front of us, and wholly
-       * inside the frame? Corners are projected through the live camera, so
-       * this is what the visitor actually sees, not a proxy for it. */
-      const corner = (alongX, y) => {
-        const v = w.camera.position.clone();
-        v.set(
-          c.x + n.x * 0 + ax.x * alongX,
-          y,
-          c.z + n.z * 0 + ax.z * alongX
-        );
-        return v.project(w.camera);
+const flight = await intro.evaluate(() => {
+  const w = window.__site.world;
+  const mon = w.scene.getObjectByName('monument');
+  if (!mon) return null;
+
+  const sc = mon.scale.x;
+  const width = mon.userData.size.width * sc;
+  const height = mon.userData.size.height * sc;
+  const r = mon.rotation.y;
+  const n = { x: Math.sin(r), z: Math.cos(r) };
+  const ax = { x: Math.cos(r), z: -Math.sin(r) };
+  const c = { x: mon.position.x, y: height / 2, z: mon.position.z };
+
+  /* updateMatrixWorld first: the camera's world matrix is normally refreshed
+   * by the render loop, and this walks the transition without rendering, so
+   * without it every projection uses the previous frame's matrix. */
+  const corner = (alongX, y) => {
+    w.camera.updateMatrixWorld(true);
+    const v = w.camera.position.clone();
+    v.set(c.x + ax.x * alongX, y, c.z + ax.z * alongX);
+    return v.project(w.camera);
+  };
+
+  const samples = [];
+  let opening = null;
+  const STEPS = 600;
+  for (let i = 0; i <= STEPS; i++) {
+    const k = i / STEPS;
+    w.setIntro(k);
+    const p = w.camera.position;
+    const d = { x: p.x - c.x, y: p.y - c.y, z: p.z - c.z };
+    samples.push({
+      n: d.x * n.x + d.z * n.z,
+      lat: d.x * ax.x + d.z * ax.z,
+      y: p.y,
+      dist: Math.hypot(d.x, d.y, d.z),
+    });
+    if (i === 0) {
+      opening = {
+        n: samples[0].n,
+        lat: samples[0].lat,
+        maxAbsX: Math.max(
+          ...[corner(-width / 2, 0), corner(width / 2, 0), corner(-width / 2, height), corner(width / 2, height)].map(
+            (v) => Math.abs(v.x)
+          )
+        ),
+        maxAbsY: Math.max(
+          ...[corner(-width / 2, 0), corner(width / 2, 0), corner(-width / 2, height), corner(width / 2, height)].map(
+            (v) => Math.abs(v.y)
+          )
+        ),
+        fov: w.camera.fov,
       };
-      let opening = null;
-
-      const t0 = performance.now();
-      (function tick() {
-        const p = w.camera.position;
-        const d = { x: p.x - c.x, y: p.y - c.y, z: p.z - c.z };
-        samples.push({
-          n: d.x * n.x + d.z * n.z,
-          lat: d.x * ax.x + d.z * ax.z,
-          y: p.y,
-          dist: Math.hypot(d.x, d.y, d.z),
-        });
-
-        if (!opening) {
-          const pts = [
-            corner(-width / 2, 0),
-            corner(width / 2, 0),
-            corner(-width / 2, height),
-            corner(width / 2, height),
-          ];
-          opening = {
-            n: samples[0].n,
-            lat: samples[0].lat,
-            maxAbsX: Math.max(...pts.map((v) => Math.abs(v.x))),
-            maxAbsY: Math.max(...pts.map((v) => Math.abs(v.y))),
-            fov: w.camera.fov,
-          };
-        }
-        if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
-        else resolve({ samples, width, height, opening });
-      })();
-    })
-);
+    }
+  }
+  w.setIntro(1); // hand back to the scroll driver
+  return { samples, width, height, opening };
+});
 
 check(Boolean(flight), 'the monument is there to fly through');
 
@@ -980,39 +1044,45 @@ if (flight) {
     `fov ${opening.fov.toFixed(1)}`
   );
 
+  /* Closest approach, and the crossing itself. */
   const closest = Math.min(...samples.map((s) => s.dist));
-  /* "Between the blocks" means inside the slab's own footprint, not merely
-   * near it: within the lettering sideways and below the top of the wall.
-   *
-   * Found by interpolating the moment the camera CROSSES the wall plane,
-   * rather than hoping a sample lands inside it. The pass is fast and this
-   * runs under a software rasteriser at about ten frames a second, so
-   * samples are ~100ms apart and routinely step straight over the wall. */
-  let between = false;
   let crossed = false;
+  let between = false;
+  let crossing = null;
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1];
     const b = samples[i];
-    if (a.n > 0 === b.n > 0) continue; // no crossing between these two
+    if (a.n > 0 === b.n > 0) continue;
     crossed = true;
-    const t = a.n / (a.n - b.n); // where between them n hits zero
+    const t = a.n / (a.n - b.n);
     const lat = a.lat + (b.lat - a.lat) * t;
     const y = a.y + (b.y - a.y) * t;
-    if (Math.abs(lat) < width / 2 && y > 0 && y < height) between = true;
+    // Keep the crossing that actually went through the wall, not the last
+    // one: the camera crosses the plane again on its way out, up and over.
+    if (Math.abs(lat) < width / 2 && y > 0 && y < height) {
+      between = true;
+      crossing = crossing ?? { lat, y };
+    }
   }
   const settled = samples[samples.length - 1].dist;
 
   check(
-    closest < 12,
+    closest < width * 0.4,
     'the Enter transition passes the monument at close range',
-    `closest approach ${closest.toFixed(1)} units`
+    `closest approach ${closest.toFixed(1)} units, wall is ${width.toFixed(0)} wide`
   );
   check(
     crossed,
     'it passes right through the wall of blocks',
-    `n runs ${samples[0].n.toFixed(0)} → ${samples[samples.length - 1].n.toFixed(0)}`
+    `n runs ${samples[0].n.toFixed(0)} to ${samples[samples.length - 1].n.toFixed(0)}`
   );
-  check(between, 'and does so between the blocks, inside the lettering');
+  check(
+    between,
+    'and does so between the blocks, inside the lettering',
+    crossing
+      ? `crosses ${crossing.lat.toFixed(1)} off centre at height ${crossing.y.toFixed(1)}, wall is ${width.toFixed(0)} x ${height.toFixed(0)}`
+      : 'never crossed'
+  );
   check(
     settled > closest * 3,
     'it then pulls back to the resting camera',

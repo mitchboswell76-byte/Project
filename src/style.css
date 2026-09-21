@@ -470,6 +470,37 @@ body.mode-2d .overlay__scrim {
   font-weight: 700;
 }
 
+/* ---------- zoom ---------- */
+
+.overlay__zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zoombtn {
+  min-width: 18px;
+  padding: 0 2px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.zoombtn:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* At the end of the range there is nowhere further to go; say so rather
+   than leaving a control that quietly does nothing. */
+.zoombtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* ==========================================================================
    2D DOCUMENT (M5)
    ========================================================================== */

@@ -82,22 +82,26 @@ export const camera = {
    */
   YAW_DEG: 145,
 
-  /* Hold that yaw relative to the ROAD rather than to the world axes.
+  /* Hold the yaw relative to the ROAD rather than to the world axes.
    *
-   * Required by the closed circuit. A world-fixed rig assumes you are always
-   * travelling broadly one way; on a loop you come back the other way, the
-   * camera ends up ahead of its own direction of travel, and the shot flips
-   * through 180 degrees. Following the heading keeps the road receding the
-   * same way across the screen for the whole lap, so the camera only turns
-   * while the road turns — on a straight it is as fixed as it ever was.
+   * OFF for the current route, which runs broadly one way: a world-fixed rig
+   * is the reference look, and it keeps the world sliding past at a constant
+   * angle through the bends instead of the diorama rotating under you.
    *
-   * Set false to go back to a world-fixed rig. Only do that with an open,
-   * broadly one-way path, or the far side of the loop will play backwards. */
-  FOLLOW_PATH_HEADING: true,
+   * Turn it ON if the route is ever made to double back on itself — a
+   * world-fixed rig then ends up ahead of its own direction of travel and the
+   * shot flips through 180 degrees. */
+  FOLLOW_PATH_HEADING: false,
 
-  DISTANCE: 78, // how far back along that pitch/yaw the camera sits.
-  // At FOV 30 / distance 78 the camera sees roughly 74 x 41 world units.
-  // Every size below is chosen against that viewport.
+  DISTANCE: 92, // how far back along that pitch/yaw the camera sits.
+  // At FOV 30 this sees roughly 88 x 49 world units of ground.
+
+  /* ZOOM. A multiplier on DISTANCE, which the visitor can change from the
+   * overlay. 1 is the default framing above; larger pulls back and shows
+   * more world, smaller moves in. The steps are the values the buttons walk
+   * through, so the range and the granularity are both set here. */
+  ZOOM_STEPS: [0.72, 0.86, 1, 1.2, 1.45, 1.75],
+  ZOOM_DEFAULT: 2, // index into ZOOM_STEPS
 
   LOOK_AHEAD: 0.01, // fraction of the curve to look ahead of the anchor.
   // (a fraction, so it was rescaled when the circuit doubled in length)
@@ -175,12 +179,11 @@ export const world = {
   /* Where each section sits along the normalised camera path (0 → 1).
    * Must have one entry per section in content.js.
    *
-   * Side midpoints are at 0.2, 0.4, 0.6 and 0.8, and the genuinely straight
-   * part of a side runs about 0.05 either side of its midpoint. A district's
-   * copy runs FORWARD from its anchor (see LAYOUT in districts.js, which is
-   * in world units), so each anchor sits a little before its own midpoint and
-   * the copy finishes before the next corner. */
-  SECTION_ANCHORS: [0.165, 0.365, 0.565, 0.765],
+   * Each anchor is the start of one of the route's straight runs, so a
+   * district's copy — which runs FORWARD from its anchor, see LAYOUT_UNITS in
+   * districts.js — lies along the straight and finishes before the next bend.
+   * The heading holds at 90 degrees for the whole of every run. */
+  SECTION_ANCHORS: [0.21, 0.406, 0.602, 0.798],
 
   /* INTERLUDES — the stretches BETWEEN districts.
    *
@@ -190,13 +193,14 @@ export const world = {
    * heading, no copy, no beam riser. They stream exactly like districts do.
    *
    * Sized to the GAPS the districts leave, not spaced by eye. A district's
-   * scenery runs from anchor-33 to anchor+190 world units, which with these
-   * anchors leaves four gaps of about 265 units and one long one of 750
-   * through the monument straight. Each anchor below is the start of a gap
-   * and each zone's span (in districts.js) is the length of it, so the
-   * scenery meets end to end without any zone reaching into a district and
-   * standing props in the middle of its heading. */
-  INTERLUDE_ANCHORS: [0.243, 0.443, 0.643, 0.843, 0.9515, 0.0601],
+   * scenery runs from anchor-33 to anchor+190 world units; on this 2,818-unit
+   * route that is 0.0117 to 0.0674 of progress, so the gaps between them run
+   * about 0.13 (roughly 370 world units) and the opening stretch carries the
+   * monument. Each anchor below is the start of a gap and each zone's span
+   * (in districts.js) is the length of it, so the scenery meets end to end
+   * without any zone reaching into a district and standing props in the
+   * middle of its heading. */
+  INTERLUDE_ANCHORS: [0.0, 0.0993, 0.2774, 0.4734, 0.6694, 0.8654],
 
   /* The long grey beam that runs alongside the route and carries the
    * section labels on the top face of its raised ends. */
@@ -246,41 +250,54 @@ export const world = {
    *
    * Regenerate with tools/gen-circuit.py if you want a different shape. */
   PATH_POINTS: [
-    [-180, 0, 0], // side 0 MIDPOINT — progress 0, the monument straight
-    [-140, 0, 0],
-    [-59, 0, 0],
-    [22, 0, 0],
-    [88, 0, 48], // corner
-    [113, 0, 125],
-    [138, 0, 202],
-    [151, 0, 240], // side 1 MIDPOINT — district 01
-    [163, 0, 279],
-    [188, 0, 356],
-    [213, 0, 433],
-    [188, 0, 510], // corner
-    [123, 0, 558],
-    [57, 0, 606],
-    [24, 0, 629], // side 2 MIDPOINT — district 02
-    [-8, 0, 653],
-    [-74, 0, 701],
-    [-139, 0, 748],
-    [-221, 0, 748], // corner
-    [-286, 0, 701],
-    [-352, 0, 653],
-    [-384, 0, 629], // side 3 MIDPOINT — district 03
-    [-417, 0, 606],
-    [-483, 0, 558],
-    [-548, 0, 510],
-    [-573, 0, 433], // corner
-    [-548, 0, 356],
-    [-523, 0, 279],
-    [-511, 0, 240], // side 4 MIDPOINT — district 04
-    [-498, 0, 202],
-    [-473, 0, 125],
-    [-448, 0, 48],
-    [-382, 0, 0], // corner, back onto side 0
-    [-301, 0, 0],
-    [-220, 0, 0],
+    /* A long ONE-WAY route, not a circuit: straight runs where the content
+     * sits, gentle S-bends between them, running broadly along +X so the
+     * composition never inverts and the world always flows the same way down
+     * the screen — like scrolling a page rather than going round a track.
+     *
+     * The opening run and the run-out are both dead straight on the same
+     * heading, which is what lets the end wrap back to the start without the
+     * shot changing shape. Regenerate with tools/gen-route.py. */
+    [-220, 0, 0], // opening run — the monument
+    [-128, 0, 0],
+    [-35, 0, 0],
+    [58, 0, 0],
+    [150, 0, 0],
+    [190, 0, 8], // bend
+    [240, 0, 31],
+    [290, 0, 54],
+    [330, 0, 62], // run — district 01
+    [418, 0, 62],
+    [505, 0, 62],
+    [592, 0, 62],
+    [680, 0, 62],
+    [720, 0, 51], // bend
+    [770, 0, 19],
+    [820, 0, -13],
+    [860, 0, -24], // run — district 02
+    [948, 0, -24],
+    [1035, 0, -24],
+    [1122, 0, -24],
+    [1210, 0, -24],
+    [1250, 0, -14], // bend
+    [1300, 0, 17],
+    [1350, 0, 48],
+    [1390, 0, 58], // run — district 03
+    [1478, 0, 58],
+    [1565, 0, 58],
+    [1652, 0, 58],
+    [1740, 0, 58],
+    [1780, 0, 47], // bend
+    [1830, 0, 14],
+    [1880, 0, -19],
+    [1920, 0, -30], // run — district 04
+    [2008, 0, -30],
+    [2095, 0, -30],
+    [2182, 0, -30],
+    [2270, 0, -30],
+    [2353, 0, -30], // run-out, straight, back to the opening heading
+    [2437, 0, -30],
+    [2520, 0, -30],
   ],
 };
 
@@ -438,7 +455,7 @@ export const overlay = {
   /* On a narrow screen the overlay stops having a column of its own and the
    * reading view runs full width beneath it, so the document needs this much
    * clear space above it. It must exceed the height of the control column. */
-  NARROW_DOC_TOP_PX: 400,
+  NARROW_DOC_TOP_PX: 470, // must clear the control column, now 446px tall
 };
 
 /* ------------------------------------------------------------------ */

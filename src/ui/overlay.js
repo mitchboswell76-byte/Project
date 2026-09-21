@@ -12,6 +12,7 @@
  *   - the site name on three lines, muted
  *   - the section nav; the current one is bold white and carries aria-current
  *   - "View :"  3D icon → document icon
+ *   - "Zoom :"  – / + , which pulls the camera back or moves it in
  *   - "Sound :" On / Off
  *
  * Every control is a real <button>, reachable by keyboard, with a visible
@@ -93,7 +94,14 @@ const ICON_DOC = `
  * @param {'2d'|'3d'} o.mode      initial view mode
  * @param {boolean} o.sound       initial sound state
  */
-export function createOverlay({ onNavigate, onViewChange, onSoundChange, mode, sound }) {
+export function createOverlay({
+  onNavigate,
+  onViewChange,
+  onSoundChange,
+  onZoomChange,
+  mode,
+  sound,
+}) {
   const root = document.getElementById('overlay');
   const ui = content.ui;
 
@@ -133,6 +141,17 @@ export function createOverlay({ onNavigate, onViewChange, onSoundChange, mode, s
       </div>
 
       <div class="overlay__row">
+        <span class="overlay__label" id="zoom-label">${ui.zoomLabel}</span>
+        <div class="overlay__zoom" role="group" aria-labelledby="zoom-label">
+          <button type="button" class="zoombtn" data-step="1"
+                  aria-label="${ui.a11y.zoomOut}">${ui.zoomOut}</button>
+          <span class="overlay__sep" aria-hidden="true">${ui.separator}</span>
+          <button type="button" class="zoombtn" data-step="-1"
+                  aria-label="${ui.a11y.zoomIn}">${ui.zoomIn}</button>
+        </div>
+      </div>
+
+      <div class="overlay__row">
         <span class="overlay__label" id="sound-label">${ui.soundLabel}</span>
         <div class="overlay__sound" role="group" aria-labelledby="sound-label">
           <button type="button" class="soundbtn" data-on="true"
@@ -154,6 +173,7 @@ export function createOverlay({ onNavigate, onViewChange, onSoundChange, mode, s
   const navButtons = [...root.querySelectorAll('.navlink')];
   const iconButtons = [...root.querySelectorAll('.icon')];
   const soundButtons = [...root.querySelectorAll('.soundbtn')];
+  const zoomButtons = [...root.querySelectorAll('.zoombtn')];
   const live = document.getElementById('live-region');
 
   navButtons.forEach((b) =>
@@ -162,6 +182,9 @@ export function createOverlay({ onNavigate, onViewChange, onSoundChange, mode, s
   iconButtons.forEach((b) => b.addEventListener('click', () => onViewChange(b.dataset.mode)));
   soundButtons.forEach((b) =>
     b.addEventListener('click', () => onSoundChange(b.dataset.on === 'true'))
+  );
+  zoomButtons.forEach((b) =>
+    b.addEventListener('click', () => onZoomChange?.(Number(b.dataset.step)))
   );
 
   /* ---------------- state ---------------- */
@@ -190,6 +213,16 @@ export function createOverlay({ onNavigate, onViewChange, onSoundChange, mode, s
         const on = b.dataset.mode === m;
         b.classList.toggle('is-active', on);
         b.setAttribute('aria-pressed', String(on));
+      });
+    },
+
+    /** Grey out a zoom button once the camera is at the end of its range. */
+    setZoom({ atMin, atMax }) {
+      zoomButtons.forEach((b) => {
+        const out = b.dataset.step === '1';
+        const spent = out ? atMax : atMin;
+        b.disabled = spent;
+        b.setAttribute('aria-disabled', String(spent));
       });
     },
 

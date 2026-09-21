@@ -29,6 +29,9 @@ export const content = {
     navLabel: 'Sections',           // aria-label on the <nav>
     viewLabel: 'View :',
     soundLabel: 'Sound :',
+    zoomLabel: 'Zoom :',
+    zoomOut: '\u2013', // en dash, reads better than a hyphen at this size
+    zoomIn: '+',
     on: 'On',
     off: 'Off',
     separator: '/',
@@ -42,6 +45,8 @@ export const content = {
       view2d: 'Switch to the reading view',
       soundOn: 'Turn sound on',
       soundOff: 'Turn sound off',
+      zoomOut: 'Zoom out',
+      zoomIn: 'Zoom in',
       skipToContent: 'Skip to content',
       sectionAnnounce: (label) => `${label} section`,
     },

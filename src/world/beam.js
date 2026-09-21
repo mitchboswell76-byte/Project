@@ -25,7 +25,10 @@ export function createBeam() {
 
   const rail = [];
   for (let i = 0; i <= n; i++) {
-    const u = i / n;
+    /* Never exactly 1: progress wraps there, so frameAt(1) would hand back
+     * the START of the route and close the ribbon with one enormous segment
+     * straight across the world. */
+    const u = Math.min(i / n, 1 - 1e-7);
     const { position, right } = frameAt(u);
     const centre = position.clone().addScaledVector(right, cfg.BEAM_SIDE);
     rail.push({

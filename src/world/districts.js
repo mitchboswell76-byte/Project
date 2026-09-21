@@ -153,6 +153,11 @@ const PRESETS = {
       { prop: 'fountain', count: 1, side: 44, along: 0.035, face: 0, anim: 'mixed' },
       { prop: 'pavilion', count: 2, side: 'far', scale: 1.0 },
       { prop: 'house', count: 4, side: 'near' },
+      { prop: 'shop', count: 3, side: 'far', face: Math.PI },
+      { prop: 'towerBlock', count: 2, side: 'far' },
+      { prop: 'kiosk', count: 2, side: 'near', face: 0 },
+      { prop: 'stall', count: 3, side: 'far', face: 0 },
+      { prop: 'shoe', count: 1, side: 42, along: 0.028, face: 0.6, scale: 2.4 },
       { prop: 'tree', count: 10, side: 'far', jitter: 0.25 },
       { prop: 'tree', count: 3, side: 'near', jitter: 0.25 },
       { prop: 'flowerBed', count: 9, side: 'far' },
@@ -172,6 +177,10 @@ const PRESETS = {
       { prop: 'cargoShip', count: 2, side: 58, face: 0 },
       { prop: 'palm', count: 6, side: [28, 38], jitter: 0.3 },
       { prop: 'house', count: 4, side: 'near' },
+      { prop: 'shop', count: 2, side: 'near', face: 0 },
+      { prop: 'towerBlock', count: 3, side: 'near' },
+      { prop: 'crates', count: 10, side: [26, 40] },
+      { prop: 'stall', count: 2, side: 'near', face: 0 },
       { prop: 'figure', count: 9, side: 'near', scale: 1.1 },
       { prop: 'lampPost', count: 4, side: 'near', face: 0 },
       { prop: 'flag', count: 2, side: 'near', face: 0, anim: 'mixed' },
@@ -189,6 +198,9 @@ const PRESETS = {
       { prop: 'cactus', count: 4, side: 'near' },
       { prop: 'flowerBed', count: 9, side: 'far' },
       { prop: 'pavilion', count: 1, side: 'near', scale: 0.9 },
+      { prop: 'kiosk', count: 2, side: 'far', face: Math.PI },
+      { prop: 'stall', count: 3, side: 'near', face: 0 },
+      { prop: 'shoe', count: 1, side: -36, along: 0.03, face: 2.2, scale: 2.0 },
       { prop: 'figure', count: 9, side: 'far', scale: 1.1 },
       { prop: 'lampPost', count: 3, side: 'near', face: 0 },
       { prop: 'flag', count: 2, side: 'far', face: 0, anim: 'mixed' },
@@ -206,6 +218,8 @@ const PRESETS = {
       { prop: 'conifer', count: 5, side: 'near', jitter: 0.3 },
       { prop: 'tree', count: 3, side: 'far' },
       { prop: 'house', count: 4, side: 'far' },
+      { prop: 'towerBlock', count: 2, side: 'far' },
+      { prop: 'shop', count: 2, side: 'far', face: Math.PI },
       { prop: 'snowDrift', count: 10, side: 'far' },
       { prop: 'snowDrift', count: 5, side: 'near' },
       { prop: 'figure', count: 6, side: 'far', scale: 1.1 },
@@ -218,10 +232,13 @@ const PRESETS = {
 };
 
 /* The landmark zones that fill the route BETWEEN districts. Same recipe
- * format as above, but with no text, no riser and a wider span, because they
- * have a whole corner or the monument straight to cover rather than a
- * district's own stretch of straight. Order matches
- * world.INTERLUDE_ANCHORS in config.js. */
+ * format as above, but with no text and no riser, and each with a span
+ * matching the gap it has to cover.
+ *
+ * ORDER MATTERS: these line up one for one with world.INTERLUDE_ANCHORS in
+ * config.js, so the monument's zone is first because its anchor is progress
+ * 0. Re-ordering one list without the other puts the castle round the
+ * wordmark. */
 /* Every interlude gets these as well as its own items: low clutter along
  * both verges, which is the part of the frame nearest the camera and the
  * part that reads as empty road when it is bare. */
@@ -231,14 +248,25 @@ const PRESETS = {
  * spread over the whole zone puts roughly none of them in shot at any one
  * moment, which is what left the foreground bare. */
 const VERGE_ITEMS = [
-  { prop: 'rock', count: 20, side: 'verge' },
-  { prop: 'rock', count: 16, side: 'vergeNear' },
+  { prop: 'rock', count: 18, side: 'verge' },
+  { prop: 'rock', count: 14, side: 'vergeNear' },
   { prop: 'fence', count: 6, side: 'vergeNear', face: 0 },
   { prop: 'fence', count: 5, side: 'verge', face: 0 },
   { prop: 'bench', count: 6, side: 'verge', face: 0 },
   { prop: 'flowerBed', count: 10, side: 'verge' },
   { prop: 'lampPost', count: 8, side: 'vergeNear', face: 0 },
   { prop: 'tree', count: 8, side: 'vergeNear', jitter: 0.3 },
+  /* Traffic and street furniture. `face: 0` points them along the route,
+   * which is what stops the cars sitting sideways across their own road. */
+  { prop: 'car', count: 7, side: 'vergeNear', face: 0 },
+  { prop: 'car', count: 4, side: 'verge', face: Math.PI },
+  { prop: 'motorbike', count: 5, side: 'vergeNear', face: 0 },
+  { prop: 'bin', count: 8, side: 'verge' },
+  { prop: 'crates', count: 7, side: 'vergeNear' },
+  { prop: 'busStop', count: 2, side: 'vergeNear', face: 0 },
+  { prop: 'figure', count: 14, side: 'verge', scale: 1.1 },
+  { prop: 'figure', count: 10, side: 'vergeNear', scale: 1.1 },
+  { prop: 'dog', count: 4, side: 'verge', scale: 1.2 },
 ];
 
 /* Districts get a lighter version of the same thing — but ONLY on the near
@@ -247,25 +275,74 @@ const VERGE_ITEMS = [
  * reaches well into that lane, and anything put there ends up standing in
  * the middle of the words. */
 const DISTRICT_VERGE_ITEMS = [
-  { prop: 'rock', count: 14, side: 'vergeNear' },
+  { prop: 'rock', count: 12, side: 'vergeNear' },
   { prop: 'fence', count: 4, side: 'vergeNear', face: 0 },
   { prop: 'bench', count: 4, side: 'vergeNear', face: 0 },
   { prop: 'flowerBed', count: 5, side: 'vergeNear' },
+  { prop: 'car', count: 5, side: 'vergeNear', face: 0 },
+  { prop: 'motorbike', count: 4, side: 'vergeNear', face: 0 },
+  { prop: 'bin', count: 5, side: 'vergeNear' },
+  { prop: 'figure', count: 9, side: 'vergeNear', scale: 1.1 },
+  { prop: 'dog', count: 3, side: 'vergeNear', scale: 1.2 },
 ];
 
 const INTERLUDE_SPAN_START = 0;
 
 const INTERLUDE_PRESETS = [
   {
+    /* The monument itself stands here. It is 47 units across and sits on the
+     * route centreline, so this zone keeps the verges clear and puts
+     * everything out beyond it — otherwise the benches and fences end up
+     * inside the wordmark. */
+    span: 280,
+    verges: false,
+    items: [
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'pavilion', count: 1, side: 44, along: 0.022 },
+      { prop: 'tree', count: 10, side: 'far', jitter: 0.3 },
+      { prop: 'tree', count: 5, side: 'near', jitter: 0.3 },
+      { prop: 'shop', count: 2, side: 'far', face: Math.PI },
+      { prop: 'towerBlock', count: 2, side: 'near' },
+      { prop: 'stall', count: 2, side: 'far', face: 0 },
+      { prop: 'flowerBed', count: 8, side: 'far' },
+      { prop: 'lampPost', count: 6, side: 'near', face: 0 },
+      { prop: 'flag', count: 4, side: 'near', face: 0, anim: 'mixed' },
+      { prop: 'figure', count: 10, side: 'far', scale: 1.1 },
+      { prop: 'critter', count: 3, side: 'far', scale: 1.25 },
+      { prop: 'balloon', count: 3, side: [42, 74], y: 'balloon', scale: 0.62, anim: true },
+      { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
+    // The approach out of the monument straight towards district 01.
+    span: 279,
+    items: [
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'house', count: 3, side: 'near' },
+      { prop: 'towerBlock', count: 3, side: 'far' },
+      { prop: 'shop', count: 2, side: 'near', face: 0 },
+      { prop: 'kiosk', count: 2, side: 'far', face: Math.PI },
+      { prop: 'tree', count: 7, side: 'far', jitter: 0.3 },
+      { prop: 'bus', count: 1, side: -32, along: 0.022, face: 0 },
+      { prop: 'signBoard', count: 2, side: 'near', face: 0 },
+      { prop: 'figure', count: 8, side: 'far', scale: 1.1 },
+      { prop: 'bird', count: 4, side: 'near', scale: 1.25 },
+      { prop: 'lampPost', count: 4, side: 'near', face: 0 },
+      { prop: 'cloud', count: 3, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
     // The tower. One big landmark, a park around it, people looking at it.
-    span: 265,
+    span: 329,
     items: [
       { prop: 'latticeTower', count: 1, side: 'landmark', along: 0.019, face: 0.4 },
       { prop: 'hill', count: 4, side: 'hills' },
       { prop: 'tree', count: 10, side: 'far', jitter: 0.3 },
       { prop: 'tree', count: 5, side: 'near', jitter: 0.3 },
       { prop: 'flowerBed', count: 6, side: 'far' },
-      { prop: 'figure', count: 10, side: 'far', scale: 1.1 },
+      { prop: 'figure', count: 12, side: 'far', scale: 1.1 },
+      { prop: 'dog', count: 3, side: 'far', scale: 1.2 },
+      { prop: 'shoe', count: 1, side: -34, along: 0.026, face: 1.4, scale: 2.2 },
       { prop: 'bird', count: 5, side: 'near', scale: 1.25 },
       { prop: 'lampPost', count: 4, side: 'near', face: 0 },
       { prop: 'balloon', count: 2, side: [44, 72], y: 'balloon', scale: 0.62, anim: true },
@@ -274,7 +351,7 @@ const INTERLUDE_PRESETS = [
   },
   {
     // The fairground: a big wheel and a windmill on the skyline.
-    span: 265,
+    span: 329,
     items: [
       { prop: 'ferrisWheel', count: 1, side: 'landmark', along: 0.02, face: 1.2, anim: 'mixed' },
       { prop: 'windmill', count: 1, side: -34, along: 0.042, face: 2.4 },
@@ -290,7 +367,7 @@ const INTERLUDE_PRESETS = [
   },
   {
     // The highlands: a castle on the hill, creatures grazing below.
-    span: 265,
+    span: 329,
     items: [
       { prop: 'castle', count: 1, side: 'landmark', along: 0.022, face: 0.5 },
       { prop: 'hill', count: 5, side: 'hills' },
@@ -305,7 +382,7 @@ const INTERLUDE_PRESETS = [
   },
   {
     // The coast and the launch pad — the last stretch before the monument.
-    span: 265,
+    span: 379,
     items: [
       { prop: 'rocket', count: 1, side: -34, along: 0.032, face: 0 },
       { prop: 'lighthouse', count: 1, side: 'landmark', along: 0.018, face: 0 },
@@ -316,42 +393,6 @@ const INTERLUDE_PRESETS = [
       { prop: 'bird', count: 6, side: 'far', scale: 1.25 },
       { prop: 'signBoard', count: 1, side: 'near', face: 0 },
       { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
-    ],
-  },
-  {
-    /* The monument itself stands here. It is 47 units across and sits on the
-     * route centreline, so this zone keeps the verges clear and puts
-     * everything out beyond it — otherwise the benches and fences end up
-     * inside the wordmark. */
-    span: 265,
-    verges: false,
-    items: [
-      { prop: 'hill', count: 4, side: 'hills' },
-      { prop: 'pavilion', count: 1, side: 44, along: 0.022 },
-      { prop: 'tree', count: 10, side: 'far', jitter: 0.3 },
-      { prop: 'tree', count: 5, side: 'near', jitter: 0.3 },
-      { prop: 'flowerBed', count: 8, side: 'far' },
-      { prop: 'lampPost', count: 6, side: 'near', face: 0 },
-      { prop: 'flag', count: 4, side: 'near', face: 0, anim: 'mixed' },
-      { prop: 'figure', count: 10, side: 'far', scale: 1.1 },
-      { prop: 'critter', count: 3, side: 'far', scale: 1.25 },
-      { prop: 'balloon', count: 3, side: [42, 74], y: 'balloon', scale: 0.62, anim: true },
-      { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
-    ],
-  },
-  {
-    // The approach out of the monument straight towards district 01.
-    span: 225,
-    items: [
-      { prop: 'hill', count: 4, side: 'hills' },
-      { prop: 'house', count: 3, side: 'near' },
-      { prop: 'tree', count: 7, side: 'far', jitter: 0.3 },
-      { prop: 'bus', count: 1, side: -32, along: 0.022, face: 0 },
-      { prop: 'signBoard', count: 2, side: 'near', face: 0 },
-      { prop: 'figure', count: 8, side: 'far', scale: 1.1 },
-      { prop: 'bird', count: 4, side: 'near', scale: 1.25 },
-      { prop: 'lampPost', count: 4, side: 'near', face: 0 },
-      { prop: 'cloud', count: 3, side: 'far', y: 'cloud', anim: true },
     ],
   },
 ];
