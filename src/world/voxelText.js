@@ -107,6 +107,14 @@ export function createVoxelText(text, { position, rotationY = 0, orientation = '
     }
   };
 
+  /* World-space extent, so callers can frame it without re-deriving the
+   * grid maths — the Enter transition uses it to fly between the blocks. */
+  mesh.userData.size = {
+    width: width * step,
+    height: upright ? height * step : cubeHeight,
+    depth: upright ? cube : height * depthStep,
+  };
+
   // Geometry and material are shared — only the instance buffers are ours.
   mesh.userData.dispose = () => mesh.dispose();
 

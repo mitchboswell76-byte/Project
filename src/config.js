@@ -92,10 +92,14 @@ export const camera = {
   ROLL_DEG: 1.6, // peak camera roll, oscillated across the journey.
   ROLL_CYCLES: 2.5, // how many roll oscillations over the full route.
 
-  /* Enter transition */
-  INTRO_DURATION: 2.6, // seconds
-  INTRO_START_DISTANCE: 5, // camera starts this close — inside the monument
-  INTRO_START_FOV: 72, // wide FOV at the start sells the fly-through
+  /* Enter transition. The camera flies into the monument, between its
+   * blocks and out the front before settling back to the resting rig.
+   * INTRO_START_DISTANCE sets how close that pass is — it is the scale of
+   * the whole approach, not just a starting dolly distance. */
+  INTRO_DURATION: 3.2, // seconds
+  INTRO_START_DISTANCE: 6, // how close the fly-through passes
+  INTRO_START_FOV: 74, // wide FOV at the start sells the fly-through
+  INTRO_EASE: 'power2.inOut', // GSAP ease driving the transition's clock
 };
 
 /* ------------------------------------------------------------------ */
@@ -114,6 +118,7 @@ export const scroll = {
   SCRUB: true,
 
   NAV_JUMP_DURATION: 1.5, // seconds for a click-to-jump camera move
+  NAV_JUMP_EASE: 'power2.inOut', // GSAP ease for that move
 };
 
 /* ------------------------------------------------------------------ */
@@ -187,6 +192,42 @@ export const world = {
     [820, 0, 6],
     [900, 0, 16], // outro
   ],
+};
+
+/* ------------------------------------------------------------------ */
+/* SCENERY (M7)                                                        */
+/* ------------------------------------------------------------------ */
+/* Where a district's props sit and how many of them there are. Props are
+ * kept out of the two lanes that carry meaning: the beam (BEAM_SIDE) and
+ * the flat body copy (CONTENT_SIDE plus groundText.BODY_WIDTH), so scenery
+ * never sits on top of anything you have to read. */
+
+export const scenery = {
+  /* Lateral bands, as distances from the route. 'near' is the beam side,
+   * 'far' the content side; the signs are taken from BEAM_SIDE and
+   * CONTENT_SIDE, so flipping YAW_DEG past 90 flips the scenery with it. */
+  NEAR_BAND: [20, 44],
+  FAR_BAND: [34, 60],
+
+  /* How far along the route a district's props are scattered, in the same
+   * normalised progress units as SECTION_ANCHORS. */
+  SPAN_START: -0.03,
+  SPAN: 0.17,
+
+  DENSITY: 1, // multiplies every prop count below 1 thins the world out
+
+  /* The small cubes that float and bob in the air throughout. */
+  FLOAT_COUNT: 30,
+  FLOAT_MIN: 0.45,
+  FLOAT_MAX: 1.3,
+  FLOAT_HEIGHT: [4, 22],
+  FLOAT_BOB_MIN: 0.4,
+  FLOAT_BOB_MAX: 1.5,
+  FLOAT_SPIN: 0.7,
+
+  CLOUD_HEIGHT: [20, 30],
+  WATER_TILE: 9.4, // edge length of one water tile
+  SNOW_TILE: 15, // edge length of one snow-cover slab
 };
 
 /* ------------------------------------------------------------------ */
@@ -266,6 +307,11 @@ export const overlay = {
   SCRIM_WIDTH_PX: 320,
   SCRIM_HEIGHT_PX: 620,
   SCRIM_ALPHA: 0.94, // opacity at the corner, where the controls are
+
+  /* On a narrow screen the overlay stops having a column of its own and the
+   * reading view runs full width beneath it, so the document needs this much
+   * clear space above it. It must exceed the height of the control column. */
+  NARROW_DOC_TOP_PX: 400,
 };
 
 /* ------------------------------------------------------------------ */

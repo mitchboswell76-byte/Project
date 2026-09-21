@@ -9,15 +9,24 @@
  *   - own the single source of truth for view mode (3D world / 2D document)
  *     and for sound, and keep the overlay in step with both
  *
- * Still stubbed: M7 scenery props, and the M8 rule that narrow screens and
- * reduced-motion visitors should *start* in 2D.
+ * Narrow screens, `prefers-reduced-motion` and machines without WebGL all
+ * START in the reading view (capability.prefer2d). Only the no-WebGL case
+ * loses the 3D control; the other two keep the toggle, so anyone who wants
+ * the world can still have it.
  */
 
 import './style.css';
 import gsap from 'gsap';
 
 import { content } from './content.js';
-import { doc as docCfg, fallback, hex, overlay as overlayCfg, palette } from './config.js';
+import {
+  camera as camCfg,
+  doc as docCfg,
+  fallback,
+  hex,
+  overlay as overlayCfg,
+  palette,
+} from './config.js';
 import { progressForSection, sectionAtProgress } from './sections.js';
 import { createEntryScreen } from './ui/entry.js';
 import { createOverlay } from './ui/overlay.js';
@@ -50,6 +59,7 @@ function applyPalette() {
   root.setProperty('--scrim-h', `${overlayCfg.SCRIM_HEIGHT_PX}px`);
   root.setProperty('--scrim-alpha', String(overlayCfg.SCRIM_ALPHA));
   root.setProperty('--measure', `${docCfg.MEASURE_CH}ch`);
+  root.setProperty('--doc-top-narrow', `${overlayCfg.NARROW_DOC_TOP_PX}px`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -90,6 +100,9 @@ function boot() {
   applyPalette();
   document.title = content.meta.siteName;
   document.body.classList.add('is-locked', 'mode-3d');
+  /* The narrow-screen layout is decided by fallback.MOBILE_BREAKPOINT_PX in
+   * config.js, not by a second breakpoint written into the stylesheet. */
+  document.body.classList.toggle('is-narrow', capability.narrow);
 
   const spacer = document.getElementById('scroll-spacer');
   spacer.style.height = `${scrollHeightVh()}vh`;
@@ -220,7 +233,9 @@ function boot() {
       document.body.classList.remove('mode-2d');
       document.body.classList.add('mode-3d');
       doc2d.hide();
+      world?.setIntro(1);
       world?.start();
+      ensureScroller();
       scroller?.enable();
       scroller?.refresh();
       const target =
@@ -235,6 +250,23 @@ function boot() {
 
   /* ---------------- Enter ---------------- */
 
+  /**
+   * Create the scroll driver. Deferred until the first time 3D is actually
+   * shown, because a visitor who starts in (or switches to) the reading view
+   * must not have ScrollTrigger competing for the page scroll.
+   */
+  function ensureScroller() {
+    if (scroller || !world) return;
+    scroller = createScrollDriver({
+      spacer,
+      onProgress: (p) => {
+        world.setProgress(p);
+        if (mode === '3d') overlay?.setSection(sectionAtProgress(p));
+      },
+    });
+    scroller.refresh();
+  }
+
   function enterSite() {
     entry.dismiss();
     document.body.classList.remove('is-locked');
@@ -248,9 +280,12 @@ function boot() {
       if (DEBUG) console.info('[audio]', sound.stats());
     });
 
-    if (!world) {
-      // No WebGL (or the build failed): the document is the site.
+    if (capability.prefer2d) {
+      /* Narrow screen, reduced motion, or no WebGL: open the reading view.
+       * The world, if there is one, stays built and stopped behind it, so
+       * the View toggle is instant rather than a second load. */
       setMode('2d', { silent: true, toTop: true });
+      if (DEBUG && world) startDebugReadout(world);
       return;
     }
 
@@ -260,19 +295,12 @@ function boot() {
     const tl = { k: 0 };
     gsap.to(tl, {
       k: 1,
-      duration: capability.reducedMotion ? 0 : 2.6,
-      ease: 'power3.inOut',
+      duration: capability.reducedMotion ? 0 : camCfg.INTRO_DURATION,
+      ease: camCfg.INTRO_EASE,
       onUpdate: () => world.setIntro(tl.k),
       onComplete: () => {
         world.setIntro(1);
-        scroller = createScrollDriver({
-          spacer,
-          onProgress: (p) => {
-            world.setProgress(p);
-            if (mode === '3d') overlay?.setSection(sectionAtProgress(p));
-          },
-        });
-        scroller.refresh();
+        ensureScroller();
         if (DEBUG) startDebugReadout(world);
       },
     });

@@ -27,7 +27,7 @@ npm run preview # serve the production build locally
 Add `?debug` to the URL (e.g. `http://localhost:5173/?debug`) to get a live
 readout of frames per second, draw calls, triangles and which chunks are
 loaded. Useful when you change the scene and want to check you have not made
-it expensive.
+it expensive. See **Performance** below for the numbers it should show.
 
 ---
 
@@ -115,6 +115,64 @@ the screen. At 38/32 it runs at about 29°; raising either makes it steeper.
 
 ---
 
+## The scenery
+
+Each section names a `district` in `content.js` — `plaza`, `harbour`,
+`gardens` or `snowfield` — and that decides what is built along its stretch
+of the route:
+
+| District | What is in it |
+|---|---|
+| `plaza` | a fountain, pavilions with yellow walls and red roofs, houses, trees, flower beds, people, lamp posts, flags, signage and a red double-decker bus |
+| `harbour` | tiled water, cargo ships stacked with containers, palms, houses, people, lamp posts and a flag |
+| `gardens` | a rainbow arch, a unicorn, trees, conifers, cacti, flower beds, a pavilion and people |
+| `snowfield` | snow cover, snow-capped conifers and houses, drifts, a blue steam train with carriages, people and lamp posts |
+
+Small coloured cubes float and bob in the air throughout, and clouds drift
+overhead. Nothing in the scenery is interactive: props are either static or
+gently animated, and none of them respond to the pointer.
+
+Every prop is drawn from cubes in `src/world/props.js`. To change how much of
+it there is, or how far from the route it sits, edit the `scenery` block in
+`config.js` — `DENSITY` scales every count at once, and `NEAR_BAND` /
+`FAR_BAND` set the two lanes props are allowed to occupy. Props are kept out
+of the middle, where the beam and the body copy live, so scenery never lands
+on top of something you have to read.
+
+Adding a prop means writing one more function in `props.js` and naming it in a
+district's list in `districts.js`. It costs no extra draw call, because a
+district's props all go into the same two instanced meshes.
+
+---
+
+## Performance
+
+Measured in this build at 1440 x 810, with `?debug`:
+
+| | Draw calls | Triangles |
+|---|---|---|
+| Before the scenery landed (M6), mid-route | 12 | 11,494 |
+| One district in view | 11 | 14,530 |
+| Two districts in view (mid-route) | 14 | 22,090 |
+| **Worst point on the route**, sweeping every 0.02 of progress | **20** | **31,486** |
+| All four districts mounted at once, before Enter | 15 | 39,674 |
+
+The budget is 150 draw calls; the worst frame on the route uses 20. That is because a
+whole district's props — several hundred cubes making up trees, houses, a
+ship, a train, a crowd of figures — are accumulated into one static
+`InstancedMesh` and one animated one, drawn from a single shared geometry and
+a single shared material.
+
+**On frame rate:** the automated checks run under SwiftShader, a software
+rasteriser, where the numbers sit between 8 and 13 fps regardless of what the
+scene contains — it is fill-rate bound, not scene bound. Those figures are not
+a real frame rate and are not quoted here as one. No GPU was available in the
+environment this was built in, so the honest position is that the draw-call
+and triangle counts above are measured and the frame rate is not. Open the
+site with `?debug` on real hardware to see the actual figure.
+
+---
+
 ## Adding or removing a section
 
 Two edits, and they must match:
@@ -197,6 +255,8 @@ src/
     chunks.js       loads and unloads districts as you travel
     districts.js    what each section's stretch of route contains
     beam.js         the long grey beam and its section markers
+    props.js        the voxel prop library — trees, houses, ships, people
+    voxelBatch.js   the cube accumulator every prop is painted into
     voxelText.js    headings built from cubes
     groundText.js   flat text lying on the ground plane
     bitmapFont.js   the hand-drawn 5x7 pixel font
@@ -221,6 +281,14 @@ drift apart when you scroll quickly. Drawing the text into the scene keeps it
 properly part of the world. The cost is that you cannot select that text with
 your mouse — which is what 2D mode is for.
 
+**Clicking Enter flies the camera through the monument.** It starts close in
+behind the wall of blocks that spells your name, passes between them — the
+wall is deliberately one cube deep so there is a gap to pass through — comes
+out the front and only then swings back to the travelling camera position. The
+whole move takes `camera.INTRO_DURATION` seconds and its shape is set by
+`INTRO_START_DISTANCE`, `INTRO_START_FOV` and `INTRO_EASE` in `config.js`. On
+a machine set to `prefers-reduced-motion` it does not run at all.
+
 **Scrolling maps directly to camera position.** The camera's position is
 worked out purely from how far down the page you are, with nothing carried
 over between frames. That is why scrolling back up retraces the route exactly
@@ -239,8 +307,17 @@ and a machine without a working graphics card get.
 Switching either way keeps your place: leave the world at section 03 and the
 document opens at section 03, and vice versa.
 
-If WebGL is unavailable the site opens straight into the reading view and the
-3D control is disabled rather than silently doing nothing.
+Three kinds of visitor get the reading view first:
+
+- **narrow screens** (under 900px wide, set by `fallback.MOBILE_BREAKPOINT_PX`
+  in `config.js`),
+- **anyone with `prefers-reduced-motion`** set in their operating system,
+- **machines without WebGL.**
+
+The first two still get the 3D control, so you can take the world if you want
+it — the world is built and waiting behind the document, so the switch is
+instant. Only the no-WebGL case has the 3D control disabled, because there
+would be nothing behind it.
 
 ## Sound
 

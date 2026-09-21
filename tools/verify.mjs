@@ -15,7 +15,11 @@
  *   6. M5 2D mode: heading order, real selectable text, contrast, position
  *      preserved across a round trip, and the whole thing with WebGL off
  *   7. M6 audio: one looping source that survives scrolling and muting
- *   8. no console errors anywhere in the run
+ *   8. M7 scenery: every prop batched into InstancedMeshes, themed per
+ *      district, rebuilt identically after a chunk unloads, and animating
+ *   9. M8 polish: the Enter transition passes between the monument blocks,
+ *      and narrow screens / reduced motion start in the reading view
+ *  10. no console errors anywhere in the run
  *
  * Writes screenshots to tools/shots/. Exits non-zero on failure.
  *
@@ -136,6 +140,192 @@ check(
 for (const p of [0.3, 0.49, 0.68, 0.87]) {
   await at(p);
   await page.screenshot({ path: `${SHOTS}/section-${String(p).replace('.', '_')}.png` });
+}
+
+/* ==================================================================== */
+/* M7 — scenery                                                         */
+/* ==================================================================== */
+
+/**
+ * Read what the scene actually contains at the current progress.
+ *
+ * Per-instance colours come back as linear floats, so rather than matching
+ * exact hex values the audit just counts how many instances are broadly
+ * white, blue or green — enough to tell a snowfield from a harbour.
+ */
+const sceneAudit = () =>
+  page.evaluate(() => {
+    const scene = window.__site.world.scene;
+    const out = { instanced: [], plainMeshes: [], monument: null };
+    scene.traverse((o) => {
+      if (o.isInstancedMesh) {
+        const tally = { white: 0, blue: 0, green: 0 };
+        const a = o.instanceColor?.array;
+        if (a) {
+          for (let i = 0; i < a.length; i += 3) {
+            const [r, g, b] = [a[i], a[i + 1], a[i + 2]];
+            if (r > 0.7 && g > 0.7 && b > 0.7) tally.white++;
+            else if (b > 0.15 && b > r * 2 && b > g * 1.5) tally.blue++;
+            else if (g > 0.1 && g > r * 1.8 && g > b * 1.8) tally.green++;
+          }
+        }
+        out.instanced.push({ name: o.name, count: o.count, tally });
+      } else if (o.isMesh) {
+        out.plainMeshes.push(o.name || '(unnamed)');
+      }
+    });
+    const mon = scene.getObjectByName('monument');
+    if (mon) out.monument = { pos: mon.position.toArray(), rotY: mon.rotation.y };
+    return out;
+  });
+
+/** Total instances of a broad colour across one district's batches. */
+const tallyFor = (audit, district, key) =>
+  audit.instanced
+    .filter((m) => m.name.includes(district))
+    .reduce((n, m) => n + m.tally[key], 0);
+
+await at(0.3);
+const plaza = await sceneAudit();
+const plazaScenery = plaza.instanced.filter((m) => m.name.startsWith('scenery-'));
+
+check(
+  plazaScenery.length === 2,
+  'a district batches all of its props into two InstancedMeshes',
+  plazaScenery.map((m) => `${m.name}:${m.count}`).join(' ')
+);
+check(
+  plazaScenery.reduce((n, m) => n + m.count, 0) > 400,
+  'the district is actually populated',
+  `${plazaScenery.reduce((n, m) => n + m.count, 0)} cubes`
+);
+check(
+  plaza.plainMeshes.every((n) => n === 'ground' || n === 'beam' || n === '(unnamed)'),
+  'no prop is an individual mesh',
+  plaza.plainMeshes.join(', ')
+);
+/* The only unnamed plain meshes allowed are the per-section risers and the
+ * flat text planes, which are one mesh each by design. */
+check(
+  plaza.plainMeshes.filter((n) => n === '(unnamed)').length <= 12,
+  'plain meshes are limited to the beam risers and flat text planes',
+  `${plaza.plainMeshes.filter((n) => n === '(unnamed)').length} of them`
+);
+
+/* Themes: the harbour has to be full of water, the snowfield full of snow. */
+await at(0.49);
+const harbour = await sceneAudit();
+await at(0.87);
+const snow = await sceneAudit();
+
+check(
+  harbour.instanced.some((m) => m.name === 'scenery-harbour-animated' && m.count > 80),
+  'the harbour district is tiled with water',
+  `${harbour.instanced.find((m) => m.name === 'scenery-harbour-animated')?.count ?? 0} animated instances`
+);
+check(
+  snow.instanced.some((m) => m.name.startsWith('scenery-snowfield')),
+  'the final district is the snowfield preset'
+);
+check(
+  tallyFor(snow, 'snowfield', 'white') > 60,
+  'the snowfield is snow covered',
+  `${tallyFor(snow, 'snowfield', 'white')} white cubes`
+);
+check(
+  tallyFor(harbour, 'harbour', 'blue') > 80,
+  'the harbour is themed with water and containers',
+  `${tallyFor(harbour, 'harbour', 'blue')} blue cubes`
+);
+check(
+  tallyFor(plaza, 'plaza', 'green') > 20,
+  'the plaza is planted',
+  `${tallyFor(plaza, 'plaza', 'green')} green cubes`
+);
+
+/* A chunk that unloads and comes back must be identical, or scrubbing back
+ * up the page would re-deal the scenery. */
+const fingerprint = () =>
+  page.evaluate(() => {
+    const mesh = window.__site.world.scene.children.find(
+      (o) => o.isInstancedMesh && o.name === 'scenery-gardens-static'
+    );
+    if (!mesh) return null;
+    const a = mesh.instanceMatrix.array;
+    let h = 0;
+    for (let i = 0; i < a.length; i++) h = (h * 31 + Math.round(a[i] * 1000)) | 0;
+    return { count: mesh.count, h };
+  });
+
+await at(0.68);
+const gardensA = await fingerprint();
+await at(0.2); // far enough away that the chunk is disposed
+const gone = await page.evaluate(() => window.__site.world.stats().chunks);
+await at(0.68);
+const gardensB = await fingerprint();
+check(
+  gardensA && gardensB && gardensA.h === gardensB.h && gardensA.count === gardensB.count,
+  'a district rebuilds identically after being unloaded',
+  `${gardensA?.count} cubes, hash ${gardensA?.h} → ${gardensB?.h}, ${gone} chunks while away`
+);
+
+/* Shared geometry must survive that round trip (ARCHITECTURE gotcha 1). */
+const afterRoundTrip = await page.evaluate(() => window.__site.world.stats());
+check(
+  afterRoundTrip.geometries <= 6,
+  'chunk teardown never disposes the shared geometry',
+  `${afterRoundTrip.geometries} geometries live`
+);
+
+/* Props are gently animated: the animated batch must actually move. */
+const moved = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const mesh = window.__site.world.scene.children.find(
+        (o) => o.isInstancedMesh && o.name.endsWith('-animated')
+      );
+      if (!mesh) return resolve(false);
+      const first = mesh.instanceMatrix.array.slice(0, 64).join(',');
+      setTimeout(() => resolve(mesh.instanceMatrix.array.slice(0, 64).join(',') !== first), 600);
+    })
+);
+check(moved, 'floating cubes and water bob rather than sitting still');
+
+/* The whole world at once, which is the worst case for draw calls. */
+const heaviest = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const w = window.__site.world;
+      let peak = 0;
+      let frames = 0;
+      const t0 = performance.now();
+      (function tick() {
+        const s = w.stats();
+        peak = Math.max(peak, s.calls);
+        frames++;
+        if (performance.now() - t0 < 2500) requestAnimationFrame(tick);
+        else
+          resolve({
+            peak,
+            fps: +((frames * 1000) / (performance.now() - t0)).toFixed(1),
+            ...w.stats(),
+          });
+      })();
+    })
+);
+check(
+  heaviest.peak < 150,
+  'draw calls stay inside the 150 budget with scenery loaded',
+  `peak ${heaviest.peak}, ${heaviest.triangles.toLocaleString()} triangles`
+);
+console.log(
+  `      note  ${heaviest.fps} fps here is SwiftShader software rasterisation, ` +
+    'not a real frame rate'
+);
+
+for (const p of [0.3, 0.49, 0.68, 0.87]) {
+  await at(p);
+  await page.screenshot({ path: `${SHOTS}/07-district-${String(p).replace('.', '_')}.png` });
 }
 
 /* ==================================================================== */
@@ -448,6 +638,234 @@ check(noGlState.readable && noGlState.headings >= 4, 'the document is fully read
 check(noGlState.overlay, 'the overlay is present with WebGL disabled');
 check(noGlState.threeDisabled, 'the 3D control is disabled rather than dead');
 check(noGlErrors.length === 0, 'no console errors with WebGL disabled', noGlErrors.join(' | '));
+
+/* ==================================================================== */
+/* M8 — the Enter transition flies between the monument blocks           */
+/* ==================================================================== */
+
+const introErrors = [];
+const intro = await browser.newPage({ viewport: { width: 1440, height: 810 } });
+intro.on('console', (m) => m.type() === 'error' && !isExpected(m.text()) && introErrors.push(m.text()));
+intro.on('pageerror', (e) => introErrors.push(`PAGEERROR: ${e.message}`));
+
+await intro.goto(URL, { waitUntil: 'networkidle' });
+await intro.waitForFunction(() => !document.getElementById('enter-button').disabled, {
+  timeout: 30000,
+});
+await intro.click('#enter-button');
+
+/* Sample the camera against the monument's own frame for the length of the
+ * transition: `n` is distance in front of (+) or behind (-) the wall, `lat`
+ * is sideways along the lettering. */
+const flight = await intro.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const w = window.__site.world;
+      const mon = w.scene.getObjectByName('monument');
+      if (!mon) return resolve(null);
+      const sc = mon.scale.x;
+      const width = mon.userData.size.width * sc;
+      const height = mon.userData.size.height * sc;
+      const r = mon.rotation.y;
+      const n = { x: Math.sin(r), z: Math.cos(r) };
+      const ax = { x: Math.cos(r), z: -Math.sin(r) };
+      const c = { x: mon.position.x, y: height / 2, z: mon.position.z };
+
+      const samples = [];
+      const t0 = performance.now();
+      (function tick() {
+        const p = w.camera.position;
+        const d = { x: p.x - c.x, y: p.y - c.y, z: p.z - c.z };
+        samples.push({
+          n: d.x * n.x + d.z * n.z,
+          lat: d.x * ax.x + d.z * ax.z,
+          y: p.y,
+          dist: Math.hypot(d.x, d.y, d.z),
+        });
+        if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
+        else resolve({ samples, width, height });
+      })();
+    })
+);
+
+check(Boolean(flight), 'the monument is there to fly through');
+
+if (flight) {
+  const { samples, width, height } = flight;
+  const closest = Math.min(...samples.map((s) => s.dist));
+  const behind = samples.some((s) => s.n < -2);
+  const inFront = samples.some((s) => s.n > 2);
+  // "Between the blocks" means inside the slab's own footprint, not merely
+  // near it: within the lettering sideways and below the top of the wall.
+  const between = samples.some(
+    (s) => Math.abs(s.n) < 4 && Math.abs(s.lat) < width / 2 && s.y > 0 && s.y < height
+  );
+  const settled = samples[samples.length - 1].dist;
+
+  check(
+    closest < 12,
+    'the Enter transition passes the monument at close range',
+    `closest approach ${closest.toFixed(1)} units`
+  );
+  check(behind && inFront, 'it passes right through the wall of blocks');
+  check(between, 'and does so between the blocks, inside the lettering');
+  check(
+    settled > closest * 3,
+    'it then pulls back to the resting camera',
+    `${closest.toFixed(1)} → ${settled.toFixed(1)} units`
+  );
+}
+
+await intro.screenshot({ path: `${SHOTS}/08-after-intro.png` });
+
+/* The hand-over to the scroll driver must not jump. */
+const handover = await intro.evaluate(() => ({
+  progress: window.__site.scroller?.progress ?? null,
+  fov: window.__site.world.camera.fov,
+}));
+check(
+  handover.progress === 0 && handover.fov === 30,
+  'the transition hands over to the scroll driver cleanly',
+  `progress ${handover.progress}, fov ${handover.fov}`
+);
+check(introErrors.length === 0, 'no console errors during the transition', introErrors.join(' | '));
+await intro.close();
+
+/* ==================================================================== */
+/* M8 — narrow screens and reduced motion start in the reading view      */
+/* ==================================================================== */
+
+/** Enter the site under some capability condition and report where it lands. */
+async function landsIn2d(label, pageOptions) {
+  const errs = [];
+  const p = await browser.newPage(pageOptions);
+  p.on('console', (m) => m.type() === 'error' && !isExpected(m.text()) && errs.push(m.text()));
+  p.on('pageerror', (e) => errs.push(`PAGEERROR: ${e.message}`));
+
+  await p.goto(URL, { waitUntil: 'networkidle' });
+  await p.waitForFunction(() => !document.getElementById('enter-button').disabled, {
+    timeout: 30000,
+  });
+  await p.click('#enter-button');
+  await p.waitForTimeout(1200);
+  await p.screenshot({ path: `${SHOTS}/09-${label}.png` });
+
+  const state = await p.evaluate(() => ({
+    mode: window.__site.mode,
+    prefer2d: window.__site.capability.prefer2d,
+    narrow: window.__site.capability.narrow,
+    reduced: window.__site.capability.reducedMotion,
+    toggleOffered: !document.querySelector('.icon--3d').disabled,
+    readable: document.getElementById('doc').textContent.trim().length > 400,
+    // The fixed overlay must not sit on top of the document's masthead.
+    clearsOverlay:
+      document.querySelector('.doc__header').getBoundingClientRect().top >=
+      document.querySelector('.overlay__inner').getBoundingClientRect().bottom,
+  }));
+
+  // The toggle is still offered, so take it and check the world really runs.
+  await p.click('.icon--3d');
+  await p.waitForTimeout(1500);
+  const after = await p.evaluate(() => ({
+    mode: window.__site.mode,
+    scroller: Boolean(window.__site.scroller),
+    calls: window.__site.world?.stats().calls ?? 0,
+  }));
+  await p.close();
+  return { state, after, errs };
+}
+
+const narrow = await landsIn2d('narrow', { viewport: { width: 720, height: 900 } });
+check(
+  narrow.state.narrow && narrow.state.prefer2d && narrow.state.mode === '2d',
+  'a narrow screen starts in the reading view',
+  `mode ${narrow.state.mode}`
+);
+check(narrow.state.readable, 'and the document is fully readable there');
+check(
+  narrow.state.clearsOverlay,
+  'the reading view clears the overlay instead of running under it'
+);
+check(narrow.state.toggleOffered, 'the 3D toggle is still offered on a narrow screen');
+check(
+  narrow.after.mode === '3d' && narrow.after.scroller && narrow.after.calls > 0,
+  'taking that toggle starts the world and the scroll driver',
+  `${narrow.after.calls} draw calls`
+);
+check(narrow.errs.length === 0, 'no console errors on a narrow screen', narrow.errs.join(' | '));
+
+const reduced = await landsIn2d('reduced-motion', {
+  viewport: { width: 1440, height: 810 },
+  reducedMotion: 'reduce',
+});
+check(
+  reduced.state.reduced && reduced.state.prefer2d && reduced.state.mode === '2d',
+  'prefers-reduced-motion starts in the reading view',
+  `mode ${reduced.state.mode}`
+);
+check(
+  reduced.state.toggleOffered && reduced.after.mode === '3d',
+  'and can still opt into the world'
+);
+check(
+  reduced.errs.length === 0,
+  'no console errors with reduced motion',
+  reduced.errs.join(' | ')
+);
+
+/* ==================================================================== */
+/* M8 — performance readout                                              */
+/* ==================================================================== */
+/* Draw calls and triangles are hardware-independent and are the real
+ * numbers. The frame rate here is NOT: this runs under SwiftShader, a
+ * software rasteriser, so it is fill-rate bound at a few frames a second
+ * whatever the scene costs. Measure fps in a real browser. */
+
+/* Sweep the whole route rather than trusting the anchors: the peak is
+ * usually between two districts, where both are still mounted. */
+let peakCalls = { calls: 0 };
+let peakTris = { triangles: 0 };
+for (let q = 0; q <= 1.0001; q += 0.05) {
+  const s = await page.evaluate((v) => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, v * max);
+    return new Promise((r) => setTimeout(() => r(window.__site.world.stats()), 280));
+  }, q);
+  if (s.calls > peakCalls.calls) peakCalls = { ...s, q: +q.toFixed(2) };
+  if (s.triangles > peakTris.triangles) peakTris = { ...s, q: +q.toFixed(2) };
+}
+check(
+  peakCalls.calls < 150,
+  'the worst point on the whole route is still inside the budget',
+  `${peakCalls.calls} calls at progress ${peakCalls.q}, ` +
+    `peak ${peakTris.triangles.toLocaleString()} triangles at ${peakTris.q}`
+);
+
+console.log('\n  progress   calls  triangles   (SwiftShader fps — not a real frame rate)');
+for (const q of [0.15, 0.3, 0.49, 0.68, 0.87]) {
+  await at(q);
+  const s = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        let f = 0;
+        const t0 = performance.now();
+        (function tick() {
+          f++;
+          if (performance.now() - t0 < 2000) requestAnimationFrame(tick);
+          else
+            resolve({
+              fps: +((f * 1000) / (performance.now() - t0)).toFixed(1),
+              ...window.__site.world.stats(),
+            });
+        })();
+      })
+  );
+  console.log(
+    `  ${q.toFixed(2)}       ${String(s.calls).padStart(4)}   ${String(
+      s.triangles.toLocaleString()
+    ).padStart(8)}   ${s.fps}`
+  );
+}
 
 await browser.close();
 

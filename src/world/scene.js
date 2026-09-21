@@ -67,10 +67,24 @@ export function createWorld(canvas) {
     orientation: 'upright',
   });
   if (monument) {
+    monument.name = 'monument';
     // Scale it up so the opening reads as a landmark rather than a sign.
     monument.scale.setScalar(1.2);
     scene.add(monument);
   }
+
+  /* What the Enter transition needs to fly into and between the blocks:
+   * where the wall is, how big it is and which way it faces. */
+  const monumentInfo = monument
+    ? {
+        centre: monument.position
+          .clone()
+          .setY((monument.userData.size.height * monument.scale.y) / 2),
+        width: monument.userData.size.width * monument.scale.x,
+        height: monument.userData.size.height * monument.scale.y,
+        rotationY: monument.rotation.y,
+      }
+    : null;
 
   const chunks = createChunkManager(scene, content.sections);
 
@@ -86,7 +100,7 @@ export function createWorld(canvas) {
 
   /* ---------------- loop ---------------- */
   const state = { progress: 0, intro: 1, running: false };
-  const driveIntro = makeIntroDriver(cam);
+  const driveIntro = makeIntroDriver(cam, monumentInfo);
   let raf = 0;
   let last = performance.now();
 

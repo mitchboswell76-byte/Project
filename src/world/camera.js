@@ -93,21 +93,99 @@ export function applyProgress(cam, progress, distanceScale = 1) {
 }
 
 /**
- * The intro fly-through: starts inside the monument with a wide FOV and
- * pulls back to the resting rig. Returns a function taking 0 → 1.
+ * The intro fly-through.
+ *
+ * The camera does not simply dolly back. It starts behind the monument at
+ * close range, flies INTO the wall of blocks, passes BETWEEN them — the slab
+ * is deliberately one cube deep, see voxelText.js — comes out the front, and
+ * only then swings back and up to the resting rig position for progress 0.
+ *
+ * The route is a Catmull-Rom curve through five points expressed in the
+ * monument's own frame, so it stays correct if the monument moves, the path
+ * changes or YAW_DEG is flipped. The last point IS the resting rig position,
+ * and at k = 1 the driver hands over to applyProgress exactly, so there is
+ * no seam between the transition and the first scroll frame.
+ *
+ * @param {THREE.PerspectiveCamera} cam
+ * @param {{centre:THREE.Vector3, width:number, height:number, rotationY:number}|null} monument
+ * @returns {(k:number)=>void} takes 0 → 1
  */
-export function makeIntroDriver(cam) {
+export function makeIntroDriver(cam, monument = null) {
+  /* Where the camera ends up: the ordinary rig at progress 0. */
+  const rest = pointAt(0, new THREE.Vector3()).add(rigOffset(cfg.DISTANCE, new THREE.Vector3()));
+  const restLook = pointAt(Math.min(cfg.LOOK_AHEAD, 1), new THREE.Vector3());
+  restLook.y += cfg.LOOK_HEIGHT;
+
+  if (!monument) {
+    // Nothing to fly through — fall back to a straight pull-back.
+    return (k) => {
+      const e = smootherstep(k);
+      cam.fov = THREE.MathUtils.lerp(cfg.INTRO_START_FOV, cfg.FOV, easeOut(k));
+      cam.updateProjectionMatrix();
+      applyProgress(cam, 0, THREE.MathUtils.lerp(cfg.INTRO_START_DISTANCE / cfg.DISTANCE, 1, e));
+    };
+  }
+
+  const { centre, height, width, rotationY } = monument;
+  // The monument's own axes: +n is the face it presents to the camera,
+  // +x runs along its reading direction.
+  const n = new THREE.Vector3(Math.sin(rotationY), 0, Math.cos(rotationY));
+  const x = new THREE.Vector3(Math.cos(rotationY), 0, -Math.sin(rotationY));
+
+  const at = (alongN, alongX, y) =>
+    centre
+      .clone()
+      .addScaledVector(n, alongN)
+      .addScaledVector(x, alongX)
+      .setY(y);
+
+  const gap = Math.max(2, width * 0.12);
+  const route = new THREE.CatmullRomCurve3(
+    [
+      at(-cfg.INTRO_START_DISTANCE * 1.6, -gap, height * 0.55), // behind, close in
+      at(-cfg.INTRO_START_DISTANCE * 0.4, gap * 0.6, height * 0.46), // entering
+      at(1.2, -gap * 0.5, height * 0.5), // between the blocks
+      at(cfg.INTRO_START_DISTANCE * 2.4, gap * 1.2, height * 0.8), // out the front
+      rest, // the resting rig
+    ],
+    false,
+    'centripetal',
+    0.5
+  );
+
+  const _pos = new THREE.Vector3();
+  const _target = new THREE.Vector3();
+  const _ahead = new THREE.Vector3();
+
   return (k) => {
-    const distanceScale = THREE.MathUtils.lerp(
-      cfg.INTRO_START_DISTANCE / cfg.DISTANCE,
-      1,
-      k
-    );
-    cam.fov = THREE.MathUtils.lerp(cfg.INTRO_START_FOV, cfg.FOV, k);
+    if (k >= 1) {
+      cam.fov = cfg.FOV;
+      cam.updateProjectionMatrix();
+      applyProgress(cam, 0);
+      return;
+    }
+
+    const e = smootherstep(THREE.MathUtils.clamp(k, 0, 1));
+    route.getPointAt(e, _pos);
+    cam.position.copy(_pos);
+
+    /* Early on, look where you are going; later, blend to the shot the
+     * scroll driver will take over with, so the handover is invisible. */
+    route.getPointAt(Math.min(e + 0.08, 1), _ahead);
+    const settle = smootherstep(THREE.MathUtils.clamp((k - 0.4) / 0.6, 0, 1));
+    _target.lerpVectors(_ahead, restLook, settle);
+
+    cam.up.set(0, 1, 0);
+    cam.fov = THREE.MathUtils.lerp(cfg.INTRO_START_FOV, cfg.FOV, easeOut(k));
     cam.updateProjectionMatrix();
-    applyProgress(cam, 0, distanceScale);
+    cam.lookAt(_target);
   };
 }
+
+/* Easing. Kept here rather than pulled from GSAP so the camera module has
+ * no dependency on the animation library that happens to drive it. */
+const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+const easeOut = (t) => 1 - (1 - t) ** 3;
 
 export function resize(cam, aspect) {
   cam.aspect = aspect;

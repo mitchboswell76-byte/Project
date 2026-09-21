@@ -586,11 +586,25 @@ body.mode-2d {
 }
 
 /* Narrow screens: the overlay no longer has a column of its own, so the
-   document runs full width beneath it. */
+   document runs full width beneath it.
+
+   `.is-narrow` is set by main.js from fallback.MOBILE_BREAKPOINT_PX, so the
+   breakpoint that decides the layout is the same one that decides the site
+   opens in the reading view. The media query below covers a window resized
+   after load, when the class is already set. */
+.is-narrow .doc {
+  padding-left: var(--gutter);
+  padding-top: var(--doc-top-narrow, 400px);
+}
+
+.is-narrow .overlay {
+  width: auto;
+}
+
 @media (max-width: 720px) {
   .doc {
     padding-left: var(--gutter);
-    padding-top: 340px;
+    padding-top: var(--doc-top-narrow, 400px);
   }
 
   .overlay {

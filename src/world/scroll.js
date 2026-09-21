@@ -53,7 +53,7 @@ export function createScrollDriver({ spacer, onProgress }) {
     return gsap.to(obj, {
       y: target,
       duration,
-      ease: 'power2.inOut',
+      ease: cfg.NAV_JUMP_EASE,
       onUpdate: () => window.scrollTo(0, obj.y),
     });
   }

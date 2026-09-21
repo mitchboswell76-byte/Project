@@ -11,12 +11,15 @@ Branch `claude/youthful-babbage-98fcpv`. Reviewed in 3 checkpoints (M1-3, M4-6, 
 - **Done** — M1 entry gate; M2 world, camera path, scroll scrub, beam + markers;
   M3 voxel headings and flat ground text; M4 persistent overlay (logo mark,
   name, nav with `aria-current`, View toggle, Sound toggle); M5 2D document
-  mode, including with WebGL disabled; M6 audio on the raw Web Audio API.
-- **Partial** — M7 districts are `createDistrictMarkers` placeholder blocks in
-  `districts.js`, delete when real props land; M8 Enter pulls back from close
-  range, fly-*between*-blocks outstanding, and the rule that narrow screens,
-  `prefers-reduced-motion` and no-WebGL should *start* in 2D is only wired for
-  the no-WebGL case (`capability.prefer2d` is computed but not yet acted on).
+  mode, including with WebGL disabled; M6 audio on the raw Web Audio API;
+  M7 themed voxel scenery per district (`props.js` + `voxelBatch.js`);
+  M8 fly-through Enter transition, `capability.prefer2d` acted on for narrow
+  screens / reduced motion / no WebGL, easing and performance passes.
+- All 72 checks in `tools/verify.mjs` pass. Measured: 20 draw calls / 31,486
+  triangles at the worst point on the route (14 and 22k mid-route, against 12
+  and 11.5k before the scenery landed), against a budget of 150 calls.
+  SwiftShader fps (8–13) is fill-rate bound and is not a real frame rate; no
+  GPU was available to measure one.
 
 `main.js` owns view mode and exposes `window.__site` (`world`, `scroller`,
 `overlay`, `doc`, `mode`, `audio`, `setMode`, `capability`). Settled, don't
@@ -46,12 +49,15 @@ src/
                    readSoundPreference
   world/
     scene.js       createWorld -> warm/start/stop/setProgress/setIntro/stats/dispose
-    camera.js      createCamera, applyProgress, makeIntroDriver, resize
+    camera.js      createCamera, applyProgress, makeIntroDriver(cam, monument), resize
     path.js        curve, pointAt, tangentAt, frameAt, offsetFromPath,
-                   headingAt, textHeadingAt
+                   headingAt, textHeadingAt, totalLength
     scroll.js      createScrollDriver -> progress/animateTo/jumpTo/refresh, scrollHeightVh
     chunks.js      createChunkManager(scene, sections) -> update/mountAll/disposeAll
-    districts.js   buildDistrict(section, u, i) -> {objects, updatables}; LAYOUT
+    districts.js   buildDistrict(section, u, i) -> {objects, updatables};
+                   buildScenery(section, u, i) -> InstancedMesh[]; LAYOUT, PRESETS
+    props.js       one function per prop form, painted through a brush
+    voxelBatch.js  createVoxelBatch({animated}) -> cube/brush/build; makeRng
     beam.js        createBeam, createRiser, riserLabelTransform
     voxelText.js   createVoxelText(text, {position, rotationY, orientation})
     groundText.js  createGroundText(text, {...}), setMaxAnisotropy
@@ -65,22 +71,26 @@ src/
 
 `palette` colours as hex numbers (not CSS strings); `accents` any length ·
 `camera` FOV PITCH_DEG YAW_DEG DISTANCE LOOK_AHEAD ROLL_DEG INTRO_* ·
-`scroll` HEIGHT_PER_SECTION_VH LEAD_IN/OUT_VH SCRUB NAV_JUMP_DURATION ·
+`scroll` HEIGHT_PER_SECTION_VH LEAD_IN/OUT_VH SCRUB NAV_JUMP_DURATION/EASE ·
 `world` SECTION_ANCHORS PATH_POINTS CHUNK_RADIUS BEAM_SIDE CONTENT_SIDE
 GROUND_TEXT_ALIGN COMPENSATE_PITCH GRID_* FOG_* ·
 `voxelText` CUBE_SIZE CUBE_HEIGHT MAX_WORLD_WIDTH ACCENT_RATIO RESHUFFLE_MS ·
-`groundText` PIXELS_PER_UNIT BODY_FONT_UNITS LABEL_FONT_UNITS BODY/LABEL_WIDTH ·
-`overlay` LOGO_* ICON_PX SCRIM_WIDTH/HEIGHT_PX SCRIM_ALPHA ·
+`scenery` NEAR/FAR_BAND SPAN_START SPAN DENSITY FLOAT_* CLOUD_HEIGHT
+WATER_TILE SNOW_TILE · `groundText` PIXELS_PER_UNIT BODY_FONT_UNITS LABEL_FONT_UNITS BODY/LABEL_WIDTH ·
+`overlay` LOGO_* ICON_PX SCRIM_WIDTH/HEIGHT_PX SCRIM_ALPHA NARROW_DOC_TOP_PX ·
 `doc` MEASURE_CH HEADING_PIXEL_PX DOT_* SCROLL_BEHAVIOUR ·
 `audio` BASE FORMATS THEME SFX THEME/SFX_GAIN FADE_IN MUTE_RAMP STORAGE_KEY ·
 helpers `hex()` `randomAccent()` `pitchCompensation()` `pickAccentIndices()`.
 
 `applyPalette()` in `main.js` pushes the palette AND the overlay/doc layout
-constants into CSS custom properties (`--bg-rgb`, `--scrim-*`, `--measure`),
+constants into CSS custom properties (`--bg-rgb`, `--scrim-*`, `--measure`,
+`--doc-top-narrow`),
 so `style.css` never hard-codes a value that `config.js` owns.
 
 Per-district placement is `LAYOUT` at the top of `districts.js` — offsets in
-normalised progress from a section anchor.
+normalised progress from a section anchor. Scenery placement is `PRESETS`
+below it, one recipe list per district, tuned by the `scenery` block in
+`config.js` (`NEAR_BAND`/`FAR_BAND`, `SPAN`, `DENSITY`, float and tile sizes).
 
 ## Verifying
 
@@ -89,13 +99,19 @@ npm run build && npm run preview   # terminal 1
 node tools/verify.mjs              # terminal 2
 ```
 
-Headless Chromium, 42 checks: entry gate, Enter handoff, scrub reversibility,
+Headless Chromium, 72 checks: entry gate, Enter handoff, scrub reversibility,
 chunk streaming, draw-call budget, the overlay (fixed position, `aria-current`
 tracking, accessible names, tab order, focus ring, nav click, scrim over a
 deliberately bright sheet), 2D mode (heading order, selectable text, AA
 contrast, dot grid, position preserved across a round trip, and the whole
 thing again with WebGL disabled), audio (one loop that survives scrolling,
-mute as gain only, sessionStorage) and console errors. Screenshots to
+mute as gain only, sessionStorage), M7 scenery (two InstancedMeshes per district and no individual prop meshes,
+per-district colour themes, a chunk that rebuilds bit-identically after being
+unloaded, shared geometry surviving that, animated instances actually moving,
+the draw-call budget), M8 (the Enter transition crossing the monument plane
+inside the lettering and settling with no seam, narrow screens and
+`prefers-reduced-motion` starting in 2D with the toggle still offered and the
+document clearing the overlay) and console errors. Screenshots to
 `tools/shots/` — `03b-overlay-on-bright.png` is the legibility evidence.
 Runs under SwiftShader, so `?debug` fps is meaningless there — measure in a
 real browser. Playwright isn't a dependency; set `PW` to a global install, and
@@ -165,3 +181,25 @@ CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node tools/verify.mjs
     `.ogg` are probed before the shipped `.wav`, so a fresh checkout logs two
     404s for files that are meant to be absent. `verify.mjs` filters exactly
     those and counts every other console error.
+18. **A district's props are two InstancedMeshes, not one per prop type.**
+    Every prop is cubes from the same shared geometry and material, so
+    `voxelBatch.js` accumulates a whole district into one static mesh and one
+    animated one. Giving a prop type its own mesh, or its own material,
+    multiplies draw calls for nothing.
+19. **Scenery placement must be deterministic.** `makeRng(seed)` is seeded from
+    the section index, so a chunk that unloads and remounts comes back
+    identical. `Math.random()` in a prop or a placement would re-deal the
+    scenery every time you scrolled back up. Props may take `rng` and use it
+    freely — just not the global one.
+20. **Props stay out of the middle.** `NEAR_BAND` and `FAR_BAND` start beyond
+    the beam and beyond `CONTENT_SIDE + BODY_WIDTH`. Narrowing them puts
+    scenery on top of the body copy and the section labels.
+21. **The intro driver must land exactly on `applyProgress(cam, 0)`.** At
+    `k >= 1` it calls that directly rather than interpolating to something
+    close, and the last control point of its curve IS the resting rig
+    position. Anything else shows as a jump on the first scroll frame.
+22. **`capability.prefer2d` is not the same as "no WebGL".** Narrow screens and
+    reduced-motion visitors also start in 2D but keep a working 3D toggle, and
+    the world stays built and stopped behind the document. Only `!webgl`
+    disables the control. `ensureScroller()` exists because the scroll driver
+    must not be created until 3D is actually shown.
