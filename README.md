@@ -1,8 +1,10 @@
 # Mitch Boswell — voxel portfolio
 
 A personal site built as an isometric voxel world that you travel through by
-scrolling. Scroll down and the camera flies along a fixed path through a
-diorama; scroll back up and it retraces exactly. There is also a plain 2D
+scrolling. Scroll down and the camera flies along a circuit through a
+diorama; scroll back up and it retraces exactly. The route is a **loop** —
+scroll past the last section and you continue straight into the first, with
+no reset and no jump. There is also a plain 2D
 document version of the same content for reading, printing, screen readers
 and low-power devices.
 
@@ -128,6 +130,12 @@ of the route:
 | `gardens` | a rainbow arch, a unicorn, trees, conifers, cacti, flower beds, a pavilion and people |
 | `snowfield` | snow cover, snow-capped conifers and houses, drifts, a blue steam train with carriages, people and lamp posts |
 
+Between the districts — on the corners of the circuit and along the monument
+straight — are **landmark zones**: an iron lattice tower, a big wheel and a
+windmill, a castle, a rocket on its launch pad beside a lighthouse, and the
+approach to the monument itself. They stream exactly like districts but carry
+no text. Original voxel creatures wander among them.
+
 Small coloured cubes float and bob in the air throughout, and clouds drift
 overhead. Nothing in the scenery is interactive: props are either static or
 gently animated, and none of them respond to the pointer.
@@ -143,6 +151,15 @@ Adding a prop means writing one more function in `props.js` and naming it in a
 district's list in `districts.js`. It costs no extra draw call, because a
 district's props all go into the same two instanced meshes.
 
+**One thing to know before you design a prop: there is no sky in this shot.**
+At the camera's pitch and field of view the frame is entirely ground — from
+about 20 to 110 units ahead of the camera, and about 50 units to the near side
+and 80 to the far side. Anything taller than roughly 14 units has its top cut
+off above the viewport, and anything outside those bands is built, streamed
+and drawn every frame without ever being seen. The big landmarks get round
+this by declaring their natural height (`latticeTower.height = 66`) and being
+scaled down to `scenery.LANDMARK_HEIGHT`.
+
 ---
 
 ## Performance
@@ -151,17 +168,17 @@ Measured in this build at 1440 x 810, with `?debug`:
 
 | | Draw calls | Triangles |
 |---|---|---|
-| Before the scenery landed (M6), mid-route | 12 | 11,494 |
-| One district in view | 11 | 14,530 |
-| Two districts in view (mid-route) | 14 | 22,090 |
-| **Worst point on the route**, sweeping every 0.02 of progress | **20** | **31,486** |
-| All four districts mounted at once, before Enter | 15 | 39,674 |
+| Before any scenery, mid-route | 12 | 11,494 |
+| On the monument straight | 7 | 20,114 |
+| At a district, with landmark zones either side | 13 | 27,900 |
+| **Worst point on the route** | **15** | **39,124** |
 
-The budget is 150 draw calls; the worst frame on the route uses 20. That is because a
-whole district's props — several hundred cubes making up trees, houses, a
-ship, a train, a crowd of figures — are accumulated into one static
+The budget is 150 draw calls; the worst frame on the route uses 15. That is
+because a whole zone's props — several hundred cubes making up trees, houses,
+a ship, a castle, a crowd of figures — are accumulated into one static
 `InstancedMesh` and one animated one, drawn from a single shared geometry and
-a single shared material.
+a single shared material. A zone costs two draw calls whatever is in it, and
+only two or three zones are ever loaded at once.
 
 **On frame rate:** the automated checks run under SwiftShader, a software
 rasteriser, where the numbers sit between 8 and 13 fps regardless of what the
@@ -181,22 +198,28 @@ Two edits, and they must match:
 2. Add or remove a matching anchor in `world.SECTION_ANCHORS` in
    **`src/config.js`**.
 
-`SECTION_ANCHORS` is a list of positions along the camera path, from `0` at
-the very start to `1` at the very end. Four evenly spread sections look like
-this:
+`SECTION_ANCHORS` is a list of positions around the circuit, from `0` to `1`.
+There is no start or end — `1` is the same place as `0`.
 
 ```js
-SECTION_ANCHORS: [0.3, 0.49, 0.68, 0.87],
+SECTION_ANCHORS: [0.165, 0.365, 0.565, 0.765],
 ```
 
-The gap before the first anchor is the opening monument, the plaza and the
-road. The gap after the last one is the run-out. If you add a fifth section,
-re-space them, for example `[0.26, 0.41, 0.56, 0.71, 0.86]`.
+The route is a rounded pentagon: **five straights, one per section plus one
+for the monument.** The straights' midpoints fall on `0`, `0.2`, `0.4`, `0.6`
+and `0.8`, and each anchor sits a little before its own midpoint so the copy
+runs along the straight and finishes before the next corner. Keeping content
+on the straights matters, because the camera holds a constant angle to the
+road and therefore only turns where the road turns.
 
-If you want a longer world to fit more in, add control points to
-`world.PATH_POINTS` in the same file. It is a list of `[x, y, z]` positions
-that the camera path is drawn through; the route runs broadly along `+X` and
-wanders sideways in `z` so it never feels like a corridor.
+If you add a sixth section you need a sixth straight: regenerate
+`world.PATH_POINTS` with six sides. It is a list of `[x, y, z]` positions the
+path is drawn through, and it is closed automatically — the last point joins
+back to the first.
+
+`world.INTERLUDE_ANCHORS` holds the landmark zones that fill the gaps between
+districts. They are sized to those gaps, so if you move the sections you will
+want to move these too.
 
 ---
 
@@ -250,12 +273,14 @@ src/
   world/
     scene.js        builds and runs the 3D world
     camera.js       the camera rig and its tuning constants
-    path.js         the single curve the whole journey follows
-    scroll.js       maps page scroll to progress along that curve
+    path.js         the single closed curve the whole journey follows
+    scroll.js       maps page scroll to progress, and wraps it at both ends
     chunks.js       loads and unloads districts as you travel
-    districts.js    what each section's stretch of route contains
+    districts.js    what each section's stretch of route contains, and the
+                    landmark zones that fill the gaps between them
     beam.js         the long grey beam and its section markers
-    props.js        the voxel prop library — trees, houses, ships, people
+    props.js        the voxel prop library — trees, houses, ships, people,
+                    landmarks and creatures
     voxelBatch.js   the cube accumulator every prop is painted into
     voxelText.js    headings built from cubes
     groundText.js   flat text lying on the ground plane
@@ -293,6 +318,20 @@ a machine set to `prefers-reduced-motion` it does not run at all.
 worked out purely from how far down the page you are, with nothing carried
 over between frames. That is why scrolling back up retraces the route exactly
 instead of slowly drifting out of alignment.
+
+**The loop is a real loop, not a jump back to the top.** The path is a closed
+curve, so progress 1 is the same point — and the same tangent — as progress 0.
+The page holds one lap plus a spare screen at each end; scroll into one of
+those and the scroll position moves by exactly one lap. Because progress
+repeats with that period, the camera does not move at all. The scrollbar
+wraps, the world does not.
+
+**The camera holds its angle to the road, not to the world.** On a circuit you
+eventually travel back the way you came, and a camera pinned to the world axes
+ends up in front of its own direction of travel — the shot flips through 180
+degrees. Following the road keeps it receding the same way across the screen
+for the whole lap, and since every section sits on a straight, the camera only
+turns where the road turns.
 
 ---
 

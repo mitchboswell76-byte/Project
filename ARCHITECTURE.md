@@ -15,11 +15,17 @@ Branch `claude/youthful-babbage-98fcpv`. Reviewed in 3 checkpoints (M1-3, M4-6, 
   M7 themed voxel scenery per district (`props.js` + `voxelBatch.js`);
   M8 fly-through Enter transition, `capability.prefer2d` acted on for narrow
   screens / reduced motion / no WebGL, easing and performance passes.
-- All 72 checks in `tools/verify.mjs` pass. Measured: 20 draw calls / 31,486
-  triangles at the worst point on the route (14 and 22k mid-route, against 12
-  and 11.5k before the scenery landed), against a budget of 150 calls.
-  SwiftShader fps (8–13) is fill-rate bound and is not a real frame rate; no
-  GPU was available to measure one.
+- **Checkpoint 4** — the route is now a CLOSED LOOP (rounded pentagon, five
+  straights: one per district plus the monument's); the camera holds its angle
+  to the road (`camera.FOLLOW_PATH_HEADING`) because a world-fixed rig flips
+  on the far side of a circuit; ScrollTrigger is gone, replaced by a direct
+  scroll reader that wraps the scroll position by exactly one lap; the Enter
+  transition opens head-on to the monument; the overlay scrim is no longer
+  drawn in 2D; and landmark INTERLUDE zones fill the gaps between districts.
+- All 87 checks in `tools/verify.mjs` pass. Measured: 15 draw calls / 39,124
+  triangles at the worst point on the route, 13 / ~28k at a district, against
+  a budget of 150 calls. SwiftShader fps (8–13) is fill-rate bound and is not
+  a real frame rate; no GPU was available to measure one.
 
 `main.js` owns view mode and exposes `window.__site` (`world`, `scroller`,
 `overlay`, `doc`, `mode`, `audio`, `setMode`, `capability`). Settled, don't
@@ -50,12 +56,19 @@ src/
   world/
     scene.js       createWorld -> warm/start/stop/setProgress/setIntro/stats/dispose
     camera.js      createCamera, applyProgress, makeIntroDriver(cam, monument), resize
-    path.js        curve, pointAt, tangentAt, frameAt, offsetFromPath,
-                   headingAt, textHeadingAt, totalLength
-    scroll.js      createScrollDriver -> progress/animateTo/jumpTo/refresh, scrollHeightVh
-    chunks.js      createChunkManager(scene, sections) -> update/mountAll/disposeAll
-    districts.js   buildDistrict(section, u, i) -> {objects, updatables};
-                   buildScenery(section, u, i) -> InstancedMesh[]; LAYOUT, PRESETS
+    path.js        curve (CLOSED), pointAt, tangentAt, frameAt,
+                   offsetFromPath, headingAt, textHeadingAt, cameraYawAt,
+                   wrap, loopDistance, totalLength
+    scroll.js      createScrollDriver -> progress/animateTo/jumpTo/refresh/
+                   enable/disable/destroy; lapVh, scrollHeightVh. No
+                   ScrollTrigger: it owns the scroll position and fights the
+                   wrap.
+    chunks.js      createChunkManager(scene, sections) -> update/mountAll/
+                   disposeAll. Streams ZONES: districts + interludes.
+    districts.js   buildDistrict(section, u, i) / buildInterlude(u, i)
+                   -> {objects, updatables}; buildScenery(preset, u, seed,
+                   label) -> InstancedMesh[]; LAYOUT_UNITS, PRESETS,
+                   INTERLUDE_PRESETS, VERGE_ITEMS
     props.js       one function per prop form, painted through a brush
     voxelBatch.js  createVoxelBatch({animated}) -> cube/brush/build; makeRng
     beam.js        createBeam, createRiser, riserLabelTransform
@@ -70,14 +83,17 @@ src/
 ## Constants — all in `config.js`
 
 `palette` colours as hex numbers (not CSS strings); `accents` any length ·
-`camera` FOV PITCH_DEG YAW_DEG DISTANCE LOOK_AHEAD ROLL_DEG INTRO_* ·
-`scroll` HEIGHT_PER_SECTION_VH LEAD_IN/OUT_VH SCRUB NAV_JUMP_DURATION/EASE ·
-`world` SECTION_ANCHORS PATH_POINTS CHUNK_RADIUS BEAM_SIDE CONTENT_SIDE
+`camera` FOV PITCH_DEG YAW_DEG FOLLOW_PATH_HEADING DISTANCE LOOK_AHEAD
+ROLL_DEG INTRO_* (DURATION START_DISTANCE FRAMING PEAK_FOV EASE) ·
+`scroll` UNITS_PER_SCREEN LOOP_BUFFER_VH SCRUB NAV_JUMP_DURATION/EASE ·
+`world` SECTION_ANCHORS INTERLUDE_ANCHORS PATH_POINTS CHUNK_RADIUS BEAM_SIDE
+CONTENT_SIDE
 GROUND_TEXT_ALIGN COMPENSATE_PITCH GRID_* FOG_* ·
 `voxelText` CUBE_SIZE CUBE_HEIGHT MAX_WORLD_WIDTH ACCENT_RATIO RESHUFFLE_MS ·
-`scenery` NEAR/FAR_BAND SPAN_START SPAN DENSITY FLOAT_* CLOUD_HEIGHT
-WATER_TILE SNOW_TILE · `groundText` PIXELS_PER_UNIT BODY_FONT_UNITS LABEL_FONT_UNITS BODY/LABEL_WIDTH ·
-`overlay` LOGO_* ICON_PX SCRIM_WIDTH/HEIGHT_PX SCRIM_ALPHA NARROW_DOC_TOP_PX ·
+`scenery` NEAR/FAR/LANDMARK/HILL/VERGE_BAND LANDMARK_HEIGHT SPAN_START_UNITS
+SPAN_UNITS DENSITY FLOAT_* CLOUD/BALLOON_HEIGHT WATER_TILE SNOW_TILE · `groundText` PIXELS_PER_UNIT BODY_FONT_UNITS LABEL_FONT_UNITS BODY/LABEL_WIDTH ·
+`overlay` LOGO_* ICON_PX SCRIM_WIDTH/HEIGHT_PX SCRIM_ALPHA NARROW_DOC_TOP_PX
+(scrim is 3D-only; `body.mode-2d` hides it) ·
 `doc` MEASURE_CH HEADING_PIXEL_PX DOT_* SCROLL_BEHAVIOUR ·
 `audio` BASE FORMATS THEME SFX THEME/SFX_GAIN FADE_IN MUTE_RAMP STORAGE_KEY ·
 helpers `hex()` `randomAccent()` `pitchCompensation()` `pickAccentIndices()`.
@@ -87,10 +103,10 @@ constants into CSS custom properties (`--bg-rgb`, `--scrim-*`, `--measure`,
 `--doc-top-narrow`),
 so `style.css` never hard-codes a value that `config.js` owns.
 
-Per-district placement is `LAYOUT` at the top of `districts.js` — offsets in
-normalised progress from a section anchor. Scenery placement is `PRESETS`
-below it, one recipe list per district, tuned by the `scenery` block in
-`config.js` (`NEAR_BAND`/`FAR_BAND`, `SPAN`, `DENSITY`, float and tile sizes).
+Per-district placement is `LAYOUT_UNITS` at the top of `districts.js` — offsets
+in WORLD UNITS from a section anchor, divided by `totalLength`. Scenery is
+`PRESETS` (per district) and `INTERLUDE_PRESETS` (the landmark zones between
+them), tuned by the `scenery` block in `config.js`.
 
 ## Verifying
 
@@ -99,7 +115,7 @@ npm run build && npm run preview   # terminal 1
 node tools/verify.mjs              # terminal 2
 ```
 
-Headless Chromium, 72 checks: entry gate, Enter handoff, scrub reversibility,
+Headless Chromium, 87 checks: entry gate, Enter handoff, scrub reversibility,
 chunk streaming, draw-call budget, the overlay (fixed position, `aria-current`
 tracking, accessible names, tab order, focus ring, nav click, scrim over a
 deliberately bright sheet), 2D mode (heading order, selectable text, AA
@@ -203,3 +219,41 @@ CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node tools/verify.mjs
     the world stays built and stopped behind the document. Only `!webgl`
     disables the control. `ensureScroller()` exists because the scroll driver
     must not be created until 3D is actually shown.
+
+23. **The route is a LOOP and progress WRAPS.** `pointAt`, `tangentAt` and
+    `applyProgress` fold progress with `wrap()` rather than clamping it, and
+    distance between two progress values is `loopDistance()` — the short way
+    round. Clamping instead piles the whole tail of the world onto one point;
+    a linear distance drops every district for a frame as you cross the join.
+24. **The camera turns with the road.** `cameraYawAt()` is the single
+    definition of the rig's yaw, and anything that must line up with the
+    screen — `textHeadingAt` above all — reads it rather than the raw
+    `YAW_DEG`. A constant there leaves every piece of flat copy skewed on the
+    corners. Turning `FOLLOW_PATH_HEADING` off only makes sense on an open,
+    broadly one-way path.
+25. **The scroll position is not the progress.** The page is a buffer, then
+    one lap, then a buffer, and the driver moves the scroll position by
+    exactly one lap when you leave the lap region. Anything that wants to go
+    to a progress value calls `jumpTo`/`animateTo`, never `window.scrollTo`
+    with a fraction of the page — including `tools/verify.mjs`.
+26. **Offsets along the route belong in WORLD UNITS, not fractions.**
+    `LAYOUT_UNITS` and `scenery.SPAN_UNITS` are divided by `totalLength` at
+    build time. As fractions they silently re-scale the whole world when
+    `PATH_POINTS` changes length — the gap between a heading and its own body
+    copy doubled the day the route became a loop.
+27. **There is no sky in the shot.** At pitch 38 / FOV 30 the frame is all
+    ground: about 20 to 110 units ahead of the camera, -50 to +80 across it,
+    and nothing over roughly 14 units tall fits. Props outside that are built,
+    streamed and drawn every frame and never seen. Landmarks declare a natural
+    `height` and are scaled to `scenery.LANDMARK_HEIGHT`; `verify.mjs` fails
+    if anything stands taller than the camera can frame.
+28. **Interlude zones must not reach into a district.** Their spans are sized
+    to the gaps the districts leave. A voxel heading is centred on
+    `CONTENT_SIDE` and can be `voxelText.MAX_WORLD_WIDTH` across, so it
+    reaches ~38 units out — which is why district verge scatter is near-side
+    only, and why an overrunning interlude stands a bench inside the words.
+29. **Sampling a fast camera move needs interpolation, not luck.**
+    `verify.mjs` runs under SwiftShader at ~8fps, so samples are ~120ms apart.
+    The Enter transition crosses a wall one cube deep in less than that, so
+    the crossing checks interpolate the moment `n` changes sign rather than
+    requiring a sample to land inside the wall.
