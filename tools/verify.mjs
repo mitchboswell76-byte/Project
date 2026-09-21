@@ -449,6 +449,9 @@ const scrim = await page.evaluate(() => {
   return {
     fixed: getComputedStyle(el).position === 'fixed',
     coversControls: s.right >= inner.right && s.bottom >= inner.bottom,
+    // Big enough to carry the controls, but not so big it is hiding scene
+    // for no reason: a wide margin past the column is wasted coverage.
+    notOversized: s.width <= inner.right + 140 && s.height <= inner.bottom + 140,
     opaque: /rgba?\(/.test(bg) && bg.includes('gradient'),
     zBelowControls:
       Number(getComputedStyle(document.getElementById('overlay')).zIndex) > 50,
@@ -459,6 +462,10 @@ check(
   scrim.fixed && scrim.coversControls && scrim.opaque && scrim.zBelowControls,
   'a scrim keeps the overlay legible over bright scenery',
   JSON.stringify(scrim)
+);
+check(
+  scrim.notOversized,
+  'and is sized to the control column rather than a quarter of the screen'
 );
 
 await page.screenshot({ path: `${SHOTS}/03b-overlay-on-bright.png`, clip: { x: 0, y: 0, width: 420, height: 560 } });
@@ -555,6 +562,29 @@ check(docState.imgAltEmpty, 'pixel headings are decorative images beside real he
 check(
   docState.overlayTop === 0 && docState.overlayLeft === 0,
   'the overlay stays put in 2D mode'
+);
+
+/* The scrim exists to carry the overlay over bright 3D scenery. In 2D it has
+ * nothing to do but darken the left edge of the body copy, which is exactly
+ * what it was doing: 320px wide against a text column starting at 238px. */
+const scrimIn2d = await page.evaluate(() => {
+  const el = document.querySelector('.overlay__scrim');
+  const text = document.querySelector('.doc__article').getBoundingClientRect();
+  const hidden = !el || getComputedStyle(el).display === 'none';
+  const r = el?.getBoundingClientRect();
+  return {
+    hidden,
+    overlapsText: hidden ? false : r.right > text.left && r.bottom > text.top,
+    textLeft: Math.round(text.left),
+    scrimRight: hidden ? 0 : Math.round(r.right),
+  };
+});
+check(
+  !scrimIn2d.overlapsText,
+  'the scrim never covers the reading view text',
+  scrimIn2d.hidden
+    ? 'not drawn in 2D at all'
+    : `scrim ends at ${scrimIn2d.scrimRight}, text starts at ${scrimIn2d.textLeft}`
 );
 
 /* Contrast of body text against the page background. */
@@ -672,6 +702,20 @@ const flight = await intro.evaluate(
       const c = { x: mon.position.x, y: height / 2, z: mon.position.z };
 
       const samples = [];
+      /* The opening shot: is the wall square on, in front of us, and wholly
+       * inside the frame? Corners are projected through the live camera, so
+       * this is what the visitor actually sees, not a proxy for it. */
+      const corner = (alongX, y) => {
+        const v = w.camera.position.clone();
+        v.set(
+          c.x + n.x * 0 + ax.x * alongX,
+          y,
+          c.z + n.z * 0 + ax.z * alongX
+        );
+        return v.project(w.camera);
+      };
+      let opening = null;
+
       const t0 = performance.now();
       (function tick() {
         const p = w.camera.position;
@@ -682,8 +726,24 @@ const flight = await intro.evaluate(
           y: p.y,
           dist: Math.hypot(d.x, d.y, d.z),
         });
+
+        if (!opening) {
+          const pts = [
+            corner(-width / 2, 0),
+            corner(width / 2, 0),
+            corner(-width / 2, height),
+            corner(width / 2, height),
+          ];
+          opening = {
+            n: samples[0].n,
+            lat: samples[0].lat,
+            maxAbsX: Math.max(...pts.map((v) => Math.abs(v.x))),
+            maxAbsY: Math.max(...pts.map((v) => Math.abs(v.y))),
+            fov: w.camera.fov,
+          };
+        }
         if (performance.now() - t0 < 5000) requestAnimationFrame(tick);
-        else resolve({ samples, width, height });
+        else resolve({ samples, width, height, opening });
       })();
     })
 );
@@ -691,7 +751,30 @@ const flight = await intro.evaluate(
 check(Boolean(flight), 'the monument is there to fly through');
 
 if (flight) {
-  const { samples, width, height } = flight;
+  const { samples, width, height, opening } = flight;
+
+  /* The opening shot — the first thing anyone sees of the 3D world. */
+  check(
+    opening.n > 0,
+    'the transition opens in FRONT of the name, not behind it',
+    `${opening.n.toFixed(1)} units along the face normal`
+  );
+  check(
+    Math.abs(opening.lat) < width * 0.1,
+    'square on to the name rather than off to one side',
+    `${opening.lat.toFixed(1)} units off centre, wall is ${width.toFixed(0)} wide`
+  );
+  check(
+    opening.maxAbsX <= 1 && opening.maxAbsY <= 1,
+    'and the whole wordmark is inside the frame',
+    `corners reach ${opening.maxAbsX.toFixed(2)}, ${opening.maxAbsY.toFixed(2)} of the viewport`
+  );
+  check(
+    Math.abs(opening.fov - 30) < 6,
+    'the opening shot is at the resting field of view, so the name reads flat',
+    `fov ${opening.fov.toFixed(1)}`
+  );
+
   const closest = Math.min(...samples.map((s) => s.dist));
   const behind = samples.some((s) => s.n < -2);
   const inFront = samples.some((s) => s.n > 2);

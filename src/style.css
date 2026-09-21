@@ -274,6 +274,14 @@ body.mode-2d {
   );
 }
 
+/* In 2D the page background is already the scene background, so the overlay
+   text sits on the same near-black it was designed against and the scrim has
+   nothing to do — except darken the first few centimetres of every line of
+   body copy. Drop it entirely rather than trying to size around the text. */
+body.mode-2d .overlay__scrim {
+  display: none;
+}
+
 .overlay__inner {
   position: relative;
   pointer-events: auto;

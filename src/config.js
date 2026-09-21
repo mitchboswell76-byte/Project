@@ -96,9 +96,15 @@ export const camera = {
    * blocks and out the front before settling back to the resting rig.
    * INTRO_START_DISTANCE sets how close that pass is — it is the scale of
    * the whole approach, not just a starting dolly distance. */
-  INTRO_DURATION: 3.2, // seconds
+  INTRO_DURATION: 3.6, // seconds
   INTRO_START_DISTANCE: 6, // how close the fly-through passes
-  INTRO_START_FOV: 74, // wide FOV at the start sells the fly-through
+  /* The opening shot is head-on at the resting FOV, so the name reads flat.
+   * FRAMING is how much room to leave around the wordmark in that shot:
+   * 1.0 is exactly full-frame, 1.3 leaves a comfortable margin. */
+  INTRO_FRAMING: 1.35,
+  /* FOV widens to this for the pass between the blocks only, then comes
+   * back — the first and last shots are both at the honest FOV above. */
+  INTRO_PEAK_FOV: 76,
   INTRO_EASE: 'power2.inOut', // GSAP ease driving the transition's clock
 };
 
@@ -300,12 +306,14 @@ export const overlay = {
   LOGO_ACCENT_PIXELS: 3,
 
   ICON_PX: 22, // the 3D / document icons in the View row
-  /* The legibility scrim. It has to carry the MUTED grey text, not just the
-   * white, over whatever scenery is behind it — so it is close to solid over
-   * the control column and only feathers out past it. Sized generously: it
-   * must still cover the column at any font size. */
-  SCRIM_WIDTH_PX: 320,
-  SCRIM_HEIGHT_PX: 620,
+  /* The legibility scrim, drawn only in 3D mode. It has to carry the MUTED
+   * grey text, not just the white, over whatever scenery is behind it — so it
+   * is close to solid over the control column and only feathers out past it.
+   * It must stay larger than the control column, which measures 182 x 388 at
+   * the default font size; past that, every extra pixel is scene it hides for
+   * no reason. */
+  SCRIM_WIDTH_PX: 260,
+  SCRIM_HEIGHT_PX: 480,
   SCRIM_ALPHA: 0.94, // opacity at the corner, where the controls are
 
   /* On a narrow screen the overlay stops having a column of its own and the
