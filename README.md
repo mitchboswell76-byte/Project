@@ -137,6 +137,36 @@ wanders sideways in `z` so it never feels like a corridor.
 
 ---
 
+## Swapping the audio
+
+The site ships with placeholder music and sound effects generated from
+scratch, so it works before you supply anything. They live in `public/audio/`:
+
+| File | What it is |
+|---|---|
+| `theme.wav` | the looping background track, about 17 seconds |
+| `sfx-enter.wav` | plays when you click Enter |
+| `sfx-nav.wav` | plays on a navigation click |
+| `sfx-toggle.wav` | plays when switching between 3D and 2D |
+
+**To use your own music, put an MP3 at `public/audio/theme.mp3`.** The loader
+tries `.mp3`, then `.ogg`, then falls back to the `.wav` — so adding your file
+is enough, with no code change and nothing to delete.
+
+What works best for the background track: **MP3 or OGG, 60–120 seconds, under
+1 MB, and seamlessly loopable** — meaning the end runs straight back into the
+start without a gap or a click. Anything longer mainly costs load time, since
+most visitors will not hear the whole thing.
+
+The same applies to the three effects: drop in `sfx-enter.mp3` and so on.
+Keep them very short (under half a second) and noticeably quieter than you
+think you need.
+
+If you ever want to regenerate the placeholders, run
+`python3 tools/gen-placeholder-audio.py` from the project root.
+
+---
+
 ## Project layout
 
 ```

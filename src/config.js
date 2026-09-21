@@ -64,7 +64,24 @@ export const camera = {
   FAR: 900,
 
   PITCH_DEG: 38, // downward tilt. 35–45 is the reference look.
-  YAW_DEG: 40, // rotation around vertical. 30–45 is the reference look.
+
+  /* YAW_DEG rotates the camera about the vertical axis.
+   *
+   * Values above 90 put the camera on the -Z side of the route, which makes
+   * the route recede towards the UPPER LEFT — so its near end sits lower
+   * right and the road reads as descending across the screen. That is the
+   * reference composition. The effective isometric rotation is (180 - YAW),
+   * so 145 here is a 35 degree turn, inside the usual 30–45 range.
+   *
+   * Values below 90 put the camera on the +Z side and mirror the whole
+   * composition: the route then ascends left to right. Try 32 for that.
+   *
+   * If you change which side of 90 this sits on, also flip the signs of
+   * BEAM_SIDE and CONTENT_SIDE below, or the beam and the body copy will
+   * swap places.
+   */
+  YAW_DEG: 145,
+
   DISTANCE: 78, // how far back along that pitch/yaw the camera sits.
   // At FOV 30 / distance 78 the camera sees roughly 74 x 41 world units.
   // Every size below is chosen against that viewport.
@@ -124,7 +141,7 @@ export const world = {
 
   /* The long grey beam that runs alongside the route and carries the
    * section labels on the top face of its raised ends. */
-  BEAM_SIDE: 16, // lateral offset from the path (+ puts it camera-side)
+  BEAM_SIDE: -16, // lateral offset from the path; sign must suit YAW_DEG
   BEAM_WIDTH: 3.6,
   BEAM_HEIGHT: 0.6,
   BEAM_SAMPLES: 420, // how finely the ribbon follows the curve
@@ -134,16 +151,23 @@ export const world = {
 
   /* Where a district's flat content sits, relative to the route. Negative
    * puts it on the far side from the beam, so the beam reads as foreground. */
-  CONTENT_SIDE: -13,
+  CONTENT_SIDE: 13,
 
   /* How flat ground text is oriented.
-   *   'path'   — runs along the route, parallel to the beam. This is the
-   *              reference look: text is tilted and foreshortened, but it
-   *              clearly belongs to the scene.
-   *   'screen' — always reads horizontally on screen. Maximum legibility,
-   *              but the text stops feeling printed on the floor.
-   * 'path' is the default; switch to 'screen' if you find it hard to read. */
-  GROUND_TEXT_ALIGN: 'path',
+   *   'screen' — still lying flat on the ground, but always turned so it
+   *              reads horizontally from the camera. Most legible. Default.
+   *   'path'   — runs along the route, parallel to the beam. Closer to the
+   *              reference, but tilted and foreshortened, so harder to read.
+   * Because the camera angle is fixed, 'screen' is a constant rotation; the
+   * text still sits in the scene rather than floating in front of it. */
+  GROUND_TEXT_ALIGN: 'screen',
+
+  /* Text lying flat on the ground is squashed vertically by the camera's
+   * downward tilt — at 38 degrees it loses about 38% of its height. Setting
+   * this true stretches flat text along its depth axis by 1 / sin(pitch) so
+   * it reads with correct proportions from the camera, while still genuinely
+   * lying on the floor. Set false to see the raw foreshortening. */
+  COMPENSATE_PITCH: true,
 
   /* The camera path control points, in world units. The route runs broadly
    * along +X with lateral wander so the diorama never feels like a corridor.
@@ -177,7 +201,7 @@ export const voxelText = {
 
   /* Headings auto-shrink to fit this width, so you can type a heading of any
    * length into content.js and it will still sit inside the frame. */
-  MAX_WORLD_WIDTH: 62,
+  MAX_WORLD_WIDTH: 50,
 
   ACCENT_RATIO: 0.1, // ~10% of cubes get an accent colour
   RESHUFFLE_MS: 1400, // how often accent colours are redealt
@@ -233,6 +257,13 @@ export const fallback = {
 
 /** 0x3fae5a → "#3fae5a" (for CSS and 2D canvas work). */
 export const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+
+/**
+ * How much to stretch flat ground text along its depth axis so the camera's
+ * downward tilt does not squash it. 1 when compensation is switched off.
+ */
+export const pitchCompensation = () =>
+  world.COMPENSATE_PITCH ? 1 / Math.sin((camera.PITCH_DEG * Math.PI) / 180) : 1;
 
 /** Pick a random accent colour as a hex number. */
 export const randomAccent = () =>

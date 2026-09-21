@@ -47,7 +47,8 @@ export function createWorld(canvas) {
   // Two lights, no more. The directional light gives cubes distinct faces;
   // the ambient stops the unlit sides going fully black.
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(-40, 70, 45);
+  // Roughly camera-side, so the faces you see are the lit ones.
+  sun.position.set(-45, 75, -38);
   scene.add(sun);
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 

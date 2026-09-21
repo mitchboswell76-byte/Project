@@ -24,9 +24,9 @@ import { boxGeometry, litMaterial } from './resources.js';
 const LAYOUT = {
   RISER: 0.0,
   HEADING: 0.028,
-  SUB_LABEL: 0.058,
-  BODY_START: 0.074,
-  BODY_STEP: 0.038,
+  SUB_LABEL: 0.050,
+  BODY_START: 0.080,
+  BODY_STEP: 0.042,
 };
 
 /** Placeholder district massing — replaced by real props in M7. */

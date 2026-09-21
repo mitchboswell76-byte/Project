@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three';
-import { groundText as cfg, hex, palette } from '../config.js';
+import { groundText as cfg, hex, palette, pitchCompensation } from '../config.js';
 import { planeGeometry } from './resources.js';
 
 /* Set from the live renderer at boot so we never ask for more anisotropy
@@ -154,7 +154,9 @@ export function createGroundText(
     depthWrite: false,
   });
 
-  const worldHeight = worldWidth * (canvasH / canvasW);
+  // Stretch the depth axis to cancel the camera's downward foreshortening,
+  // so the text reads at its true proportions while still lying flat.
+  const worldHeight = worldWidth * (canvasH / canvasW) * pitchCompensation();
   const mesh = new THREE.Mesh(planeGeometry(), material);
   mesh.scale.set(worldWidth, worldHeight, 1);
   // Yaw first about world Y, then lay the plane flat about its own X axis.

@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { palette, voxelText as cfg } from '../config.js';
+import { palette, pitchCompensation, voxelText as cfg } from '../config.js';
 import { boxGeometry, litMaterial } from './resources.js';
 import { textToPixels } from './pixels.js';
 
@@ -56,6 +56,9 @@ export function createVoxelText(text, { position, rotationY = 0, orientation = '
   const halfH = (height - 1) / 2;
 
   const upright = orientation === 'upright';
+  // Flat headings get the same depth stretch as flat paragraphs, so a
+  // heading and the copy beneath it stay in the same visual system.
+  const depthStep = upright ? step : step * pitchCompensation();
 
   coords.forEach((c, i) => {
     if (upright) {
@@ -65,7 +68,7 @@ export function createVoxelText(text, { position, rotationY = 0, orientation = '
       _matrix.setPosition((c.x - halfW) * step, (height - c.y - 0.5) * step, 0);
     } else {
       _matrix.makeScale(cube, cubeHeight, cube);
-      _matrix.setPosition((c.x - halfW) * step, cubeHeight / 2, (c.y - halfH) * step);
+      _matrix.setPosition((c.x - halfW) * step, cubeHeight / 2, (c.y - halfH) * depthStep);
     }
     mesh.setMatrixAt(i, _matrix);
     mesh.setColorAt(i, _grey);
