@@ -182,6 +182,22 @@ export const world = {
    * the copy finishes before the next corner. */
   SECTION_ANCHORS: [0.165, 0.365, 0.565, 0.765],
 
+  /* INTERLUDES — the stretches BETWEEN districts.
+   *
+   * A district only occupies the straight it sits on; the corners and the
+   * monument approach are route with nothing on them. Each anchor here gets
+   * a landmark zone from INTERLUDE_PRESETS in districts.js: scenery only, no
+   * heading, no copy, no beam riser. They stream exactly like districts do.
+   *
+   * Sized to the GAPS the districts leave, not spaced by eye. A district's
+   * scenery runs from anchor-33 to anchor+190 world units, which with these
+   * anchors leaves four gaps of about 265 units and one long one of 750
+   * through the monument straight. Each anchor below is the start of a gap
+   * and each zone's span (in districts.js) is the length of it, so the
+   * scenery meets end to end without any zone reaching into a district and
+   * standing props in the middle of its heading. */
+  INTERLUDE_ANCHORS: [0.243, 0.443, 0.643, 0.843, 0.9515, 0.0601],
+
   /* The long grey beam that runs alongside the route and carries the
    * section labels on the top face of its raised ends. */
   BEAM_SIDE: -16, // lateral offset from the path; sign must suit YAW_DEG
@@ -279,9 +295,36 @@ export const world = {
 export const scenery = {
   /* Lateral bands, as distances from the route. 'near' is the beam side,
    * 'far' the content side; the signs are taken from BEAM_SIDE and
-   * CONTENT_SIDE, so flipping YAW_DEG past 90 flips the scenery with it. */
-  NEAR_BAND: [20, 44],
-  FAR_BAND: [34, 60],
+   * CONTENT_SIDE, so flipping YAW_DEG past 90 flips the scenery with it.
+   *
+   * These are bounded by what the camera can actually SEE. At the resting
+   * rig the visible ground runs from about 20 to 120 units ahead of the
+   * camera's anchor and from about -50 to +80 across it. Props outside that
+   * are built, streamed and drawn, and never once appear on screen — so the
+   * bands stop at the edge of the frame rather than somewhere arbitrary. */
+  NEAR_BAND: [22, 48],
+  FAR_BAND: [30, 66],
+
+  /* Where the big landmarks stand.
+   *
+   * There is no sky in this shot: at pitch 38 and FOV 30 the frame is all
+   * ground, from about 20 to 110 units ahead of the camera. That caps how
+   * TALL anything can be and still fit — roughly 18 units at 40 ahead,
+   * falling to 10 at 80. LANDMARK_SCALE below trims the landmark props to
+   * that budget rather than widening the camera, which would shrink the
+   * ground text with it. */
+  LANDMARK_BAND: [32, 46],
+  /* And the hills behind them, along the top edge of the shot. */
+  HILL_BAND: [56, 80],
+
+  /* What the tallest landmark should measure, in world units. Each landmark
+   * prop is designed at its own natural size and scaled to this, so they
+   * stay in proportion to each other while fitting the frame. */
+  LANDMARK_HEIGHT: 14,
+
+  /* Right beside the road. In a district this lane carries the body copy, so
+   * only the interludes use it — it is the emptiest part of the frame. */
+  VERGE_BAND: [17, 30],
 
   /* How far along the route a district's props are scattered, in WORLD
    * UNITS from its anchor. World units, not a fraction of the route: a
@@ -296,12 +339,18 @@ export const scenery = {
   FLOAT_COUNT: 30,
   FLOAT_MIN: 0.45,
   FLOAT_MAX: 1.3,
-  FLOAT_HEIGHT: [4, 22],
+  // Minimum well clear of the flat ground text, or a low cube reads as a
+  // brick sitting in the middle of a heading rather than as floating.
+  FLOAT_HEIGHT: [7, 24],
   FLOAT_BOB_MIN: 0.4,
   FLOAT_BOB_MAX: 1.5,
   FLOAT_SPIN: 0.7,
 
-  CLOUD_HEIGHT: [20, 30],
+  /* Airborne props have the same height budget as everything else: the frame
+   * has no sky in it, so a cloud at 30 units is drawn above the top of the
+   * viewport every frame and never seen. */
+  CLOUD_HEIGHT: [13, 19],
+  BALLOON_HEIGHT: [6, 11],
   WATER_TILE: 9.4, // edge length of one water tile
   SNOW_TILE: 15, // edge length of one snow-cover slab
 };

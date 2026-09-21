@@ -115,7 +115,9 @@ export function buildDistrict(section, u, index) {
   });
 
   /* ---- scenery ---- */
-  for (const mesh of buildScenery(section, u, index)) add(mesh);
+  const base = PRESETS[section.district] ?? PRESETS.plaza;
+  const preset = { ...base, items: [...base.items, ...DISTRICT_VERGE_ITEMS] };
+  for (const mesh of buildScenery(preset, u, index, section.district)) add(mesh);
 
   return { objects, updatables };
 }
@@ -215,6 +217,145 @@ const PRESETS = {
   },
 };
 
+/* The landmark zones that fill the route BETWEEN districts. Same recipe
+ * format as above, but with no text, no riser and a wider span, because they
+ * have a whole corner or the monument straight to cover rather than a
+ * district's own stretch of straight. Order matches
+ * world.INTERLUDE_ANCHORS in config.js. */
+/* Every interlude gets these as well as its own items: low clutter along
+ * both verges, which is the part of the frame nearest the camera and the
+ * part that reads as empty road when it is bare. */
+/* Counts are high because of where this lands. The nearest corner of the
+ * frame is filled only by props 10 to 30 units ahead of the camera on the
+ * near verge — a 20-unit window out of a 280-unit zone. A handful of props
+ * spread over the whole zone puts roughly none of them in shot at any one
+ * moment, which is what left the foreground bare. */
+const VERGE_ITEMS = [
+  { prop: 'rock', count: 20, side: 'verge' },
+  { prop: 'rock', count: 16, side: 'vergeNear' },
+  { prop: 'fence', count: 6, side: 'vergeNear', face: 0 },
+  { prop: 'fence', count: 5, side: 'verge', face: 0 },
+  { prop: 'bench', count: 6, side: 'verge', face: 0 },
+  { prop: 'flowerBed', count: 10, side: 'verge' },
+  { prop: 'lampPost', count: 8, side: 'vergeNear', face: 0 },
+  { prop: 'tree', count: 8, side: 'vergeNear', jitter: 0.3 },
+];
+
+/* Districts get a lighter version of the same thing — but ONLY on the near
+ * verge. The far verge is where the copy lives: a voxel heading is centred
+ * on CONTENT_SIDE and can be up to voxelText.MAX_WORLD_WIDTH across, so it
+ * reaches well into that lane, and anything put there ends up standing in
+ * the middle of the words. */
+const DISTRICT_VERGE_ITEMS = [
+  { prop: 'rock', count: 14, side: 'vergeNear' },
+  { prop: 'fence', count: 4, side: 'vergeNear', face: 0 },
+  { prop: 'bench', count: 4, side: 'vergeNear', face: 0 },
+  { prop: 'flowerBed', count: 5, side: 'vergeNear' },
+];
+
+const INTERLUDE_SPAN_START = 0;
+
+const INTERLUDE_PRESETS = [
+  {
+    // The tower. One big landmark, a park around it, people looking at it.
+    span: 265,
+    items: [
+      { prop: 'latticeTower', count: 1, side: 'landmark', along: 0.019, face: 0.4 },
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'tree', count: 10, side: 'far', jitter: 0.3 },
+      { prop: 'tree', count: 5, side: 'near', jitter: 0.3 },
+      { prop: 'flowerBed', count: 6, side: 'far' },
+      { prop: 'figure', count: 10, side: 'far', scale: 1.1 },
+      { prop: 'bird', count: 5, side: 'near', scale: 1.25 },
+      { prop: 'lampPost', count: 4, side: 'near', face: 0 },
+      { prop: 'balloon', count: 2, side: [44, 72], y: 'balloon', scale: 0.62, anim: true },
+      { prop: 'cloud', count: 3, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
+    // The fairground: a big wheel and a windmill on the skyline.
+    span: 265,
+    items: [
+      { prop: 'ferrisWheel', count: 1, side: 'landmark', along: 0.02, face: 1.2, anim: 'mixed' },
+      { prop: 'windmill', count: 1, side: -34, along: 0.042, face: 2.4 },
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'signBoard', count: 2, side: 'near', face: 0 },
+      { prop: 'flag', count: 4, side: 'far', face: 0, anim: 'mixed' },
+      { prop: 'figure', count: 12, side: 'far', scale: 1.1 },
+      { prop: 'critter', count: 4, side: 'near', scale: 1.25 },
+      { prop: 'tree', count: 6, side: 'near', jitter: 0.3 },
+      { prop: 'flowerBed', count: 5, side: 'far' },
+      { prop: 'balloon', count: 3, side: [40, 70], y: 'balloon', scale: 0.62, anim: true },
+    ],
+  },
+  {
+    // The highlands: a castle on the hill, creatures grazing below.
+    span: 265,
+    items: [
+      { prop: 'castle', count: 1, side: 'landmark', along: 0.022, face: 0.5 },
+      { prop: 'hill', count: 5, side: 'hills' },
+      { prop: 'conifer', count: 12, side: 'far', jitter: 0.35 },
+      { prop: 'conifer', count: 6, side: 'near', jitter: 0.35 },
+      { prop: 'grazer', count: 4, side: 'far', scale: 1.3 },
+      { prop: 'critter', count: 5, side: 'near', scale: 1.25 },
+      { prop: 'bird', count: 4, side: 'far', scale: 1.25 },
+      { prop: 'flag', count: 2, side: 'near', face: 0, anim: 'mixed' },
+      { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
+    // The coast and the launch pad — the last stretch before the monument.
+    span: 265,
+    items: [
+      { prop: 'rocket', count: 1, side: -34, along: 0.032, face: 0 },
+      { prop: 'lighthouse', count: 1, side: 'landmark', along: 0.018, face: 0 },
+      { prop: 'waterTile', side: [74, 118], face: 0, anim: true, lattice: true, tile: scfg.WATER_TILE },
+      { prop: 'hill', count: 3, side: 'hills', snow: true },
+      { prop: 'conifer', count: 7, side: 'far', jitter: 0.3 },
+      { prop: 'figure', count: 8, side: 'near', scale: 1.1 },
+      { prop: 'bird', count: 6, side: 'far', scale: 1.25 },
+      { prop: 'signBoard', count: 1, side: 'near', face: 0 },
+      { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
+    /* The monument itself stands here. It is 47 units across and sits on the
+     * route centreline, so this zone keeps the verges clear and puts
+     * everything out beyond it — otherwise the benches and fences end up
+     * inside the wordmark. */
+    span: 265,
+    verges: false,
+    items: [
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'pavilion', count: 1, side: 44, along: 0.022 },
+      { prop: 'tree', count: 10, side: 'far', jitter: 0.3 },
+      { prop: 'tree', count: 5, side: 'near', jitter: 0.3 },
+      { prop: 'flowerBed', count: 8, side: 'far' },
+      { prop: 'lampPost', count: 6, side: 'near', face: 0 },
+      { prop: 'flag', count: 4, side: 'near', face: 0, anim: 'mixed' },
+      { prop: 'figure', count: 10, side: 'far', scale: 1.1 },
+      { prop: 'critter', count: 3, side: 'far', scale: 1.25 },
+      { prop: 'balloon', count: 3, side: [42, 74], y: 'balloon', scale: 0.62, anim: true },
+      { prop: 'cloud', count: 4, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+  {
+    // The approach out of the monument straight towards district 01.
+    span: 225,
+    items: [
+      { prop: 'hill', count: 4, side: 'hills' },
+      { prop: 'house', count: 3, side: 'near' },
+      { prop: 'tree', count: 7, side: 'far', jitter: 0.3 },
+      { prop: 'bus', count: 1, side: -32, along: 0.022, face: 0 },
+      { prop: 'signBoard', count: 2, side: 'near', face: 0 },
+      { prop: 'figure', count: 8, side: 'far', scale: 1.1 },
+      { prop: 'bird', count: 4, side: 'near', scale: 1.25 },
+      { prop: 'lampPost', count: 4, side: 'near', face: 0 },
+      { prop: 'cloud', count: 3, side: 'far', y: 'cloud', anim: true },
+    ],
+  },
+];
+
 /** The signs of the two lanes, taken from config so a YAW flip carries. */
 const nearSign = Math.sign(cfg.BEAM_SIDE) || -1;
 const farSign = Math.sign(cfg.CONTENT_SIDE) || 1;
@@ -222,29 +363,61 @@ const farSign = Math.sign(cfg.CONTENT_SIDE) || 1;
 function lateral(side, rng) {
   if (typeof side === 'number') return side;
   if (Array.isArray(side)) return side[0] + rng() * (side[1] - side[0]);
-  const [lo, hi] = side === 'near' ? scfg.NEAR_BAND : scfg.FAR_BAND;
-  const sign = side === 'near' ? nearSign : farSign;
+  const bands = {
+    near: [scfg.NEAR_BAND, nearSign],
+    far: [scfg.FAR_BAND, farSign],
+    landmark: [scfg.LANDMARK_BAND, farSign],
+    hills: [scfg.HILL_BAND, farSign],
+    verge: [scfg.VERGE_BAND, farSign],
+    vergeNear: [scfg.VERGE_BAND, nearSign],
+  };
+  const [[lo, hi], sign] = bands[side] ?? bands.far;
   return sign * (lo + rng() * (hi - lo));
 }
 
 function height(y, rng) {
   if (typeof y === 'number') return y;
-  if (y === 'cloud') {
-    const [lo, hi] = scfg.CLOUD_HEIGHT;
+  if (y === 'cloud' || y === 'balloon') {
+    const [lo, hi] = y === 'cloud' ? scfg.CLOUD_HEIGHT : scfg.BALLOON_HEIGHT;
     return lo + rng() * (hi - lo);
   }
   return 0;
 }
 
 /**
+ * An INTERLUDE: the landmark scenery filling a stretch between districts.
+ * No heading, no copy, no beam riser — just the world either side of the
+ * road, so the route is never empty for long.
+ *
+ * @returns {{ objects: object[], updatables: object[] }}
+ */
+export function buildInterlude(u, index) {
+  const base = INTERLUDE_PRESETS[index % INTERLUDE_PRESETS.length];
+  const preset = {
+    ...base,
+    spanStart: INTERLUDE_SPAN_START,
+    items: base.verges === false ? base.items : [...base.items, ...VERGE_ITEMS],
+  };
+  const objects = [];
+  const updatables = [];
+  // Seeded well clear of the districts', so two zones never deal the same
+  // scatter just because they happen to share an index.
+  for (const mesh of buildScenery(preset, u, 0x51ed + index * 977, `interlude${index}`)) {
+    objects.push(mesh);
+    if (typeof mesh.update === 'function') updatables.push(mesh);
+  }
+  return { objects, updatables };
+}
+
+/**
  * Work out a lattice that fills a lateral band and the district's span with
  * tiles of a given edge length, meeting rather than overlapping.
  */
-function latticeOf(side, tile) {
+function latticeOf(side, tile, span) {
   const lo = Math.min(side[0], side[1]);
   const hi = Math.max(side[0], side[1]);
   const cols = Math.max(1, Math.round((hi - lo) / tile) + 1);
-  const rows = Math.max(1, Math.round(scfg.SPAN_UNITS / tile) + 1);
+  const rows = Math.max(1, Math.round(span / tile) + 1);
   return { lo, cols, rows, step: tile };
 }
 
@@ -257,9 +430,13 @@ function latticeOf(side, tile) {
  *
  * @returns {object[]} at most two InstancedMeshes: static, then animated.
  */
-export function buildScenery(section, u, index) {
-  const preset = PRESETS[section.district] ?? PRESETS.plaza;
-  const rng = makeRng(0x9e3779b9 ^ (index * 0x85ebca6b));
+export function buildScenery(preset, u, seed, label) {
+  const rng = makeRng(0x9e3779b9 ^ (seed * 0x85ebca6b));
+  const span = preset.span ?? scfg.SPAN_UNITS;
+  // An interlude's anchor IS the start of the gap it fills, so it gets no
+  // run-in; a district's anchor is where its copy starts, so its scenery
+  // begins a little before that.
+  const spanStart = preset.spanStart ?? scfg.SPAN_START_UNITS;
 
   const still = createVoxelBatch();
   const moving = createVoxelBatch({ animated: true });
@@ -268,7 +445,7 @@ export function buildScenery(section, u, index) {
     const fn = props[item.prop];
     if (!fn) continue;
     const lattice = item.lattice
-      ? latticeOf(item.side, item.tile)
+      ? latticeOf(item.side, item.tile, span)
       : null;
     const count = lattice
       ? lattice.cols * lattice.rows
@@ -282,20 +459,25 @@ export function buildScenery(section, u, index) {
         const col = i % lattice.cols;
         const row = (i / lattice.cols) | 0;
         side = lattice.lo + col * lattice.step;
-        alongU = u + along(scfg.SPAN_START_UNITS + row * item.tile);
+        alongU = u + along(spanStart + row * item.tile);
       } else {
         alongU =
           u +
           (item.along ??
             along(
-              scfg.SPAN_START_UNITS + ((i + rng()) / Math.max(count, 1)) * scfg.SPAN_UNITS
+              spanStart + ((i + rng()) / Math.max(count, 1)) * span
             ));
         side = lateral(item.side, rng);
       }
       const origin = offsetFromPath(alongU, side, 0, height(item.y, rng));
       const rotY = headingAt(alongU) + (item.face ?? rng() * TAU);
       const jitter = item.jitter ?? 0;
-      const scale = (item.scale ?? 1) * (1 - jitter / 2 + rng() * jitter);
+      /* A prop that declares its own natural height is a landmark, and gets
+       * scaled to the frame's height budget. Without this the tall ones are
+       * built at full size, and the camera — which has no sky in shot — only
+       * ever shows their legs. */
+      const toBudget = fn.height ? scfg.LANDMARK_HEIGHT / fn.height : 1;
+      const scale = (item.scale ?? 1) * toBudget * (1 - jitter / 2 + rng() * jitter);
 
       const paint = (item.anim === true ? moving : still).brush(origin, rotY, scale);
       const animPaint =
@@ -308,7 +490,7 @@ export function buildScenery(section, u, index) {
   /* The small cubes that float and bob in the air, everywhere. */
   const [fy0, fy1] = scfg.FLOAT_HEIGHT;
   for (let i = 0; i < Math.round(scfg.FLOAT_COUNT * scfg.DENSITY); i++) {
-    const at = u + along(scfg.SPAN_START_UNITS + rng() * scfg.SPAN_UNITS);
+    const at = u + along(spanStart + rng() * span);
     const side = (rng() > 0.5 ? nearSign : farSign) * (10 + rng() * 55);
     const origin = offsetFromPath(at, side, 0, fy0 + rng() * (fy1 - fy0));
     props.floatingCube(moving.brush(origin, 0, 1), { rng });
@@ -316,7 +498,7 @@ export function buildScenery(section, u, index) {
 
   const built = [still.build(), moving.build()].filter(Boolean);
   built.forEach((mesh, i) => {
-    mesh.name = `scenery-${section.district}-${i === 0 ? 'static' : 'animated'}`;
+    mesh.name = `scenery-${label}-${i === 0 ? 'static' : 'animated'}`;
   });
   return built;
 }

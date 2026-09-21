@@ -1,27 +1,47 @@
 /**
- * chunks.js — streams districts in and out as the camera travels.
+ * chunks.js — streams the world in and out as the camera travels.
  *
  * A chunk is built the first time the camera comes within CHUNK_RADIUS of its
  * anchor, and torn down once it falls outside that range. Only the chunk's own
  * objects are disposed: shared geometry and materials belong to resources.js
  * and must outlive any individual chunk.
+ *
+ * Two kinds of chunk, streamed identically:
+ *   - a DISTRICT, which carries a section's heading, copy, beam riser and
+ *     themed scenery, on the straight that section sits on;
+ *   - an INTERLUDE, which is the landmark scenery filling the corners and
+ *     the monument approach between them, and has no text at all.
  */
 
 import { world as cfg } from '../config.js';
-import { buildDistrict } from './districts.js';
+import { buildDistrict, buildInterlude } from './districts.js';
 import { loopDistance, wrap } from './path.js';
 
 export function createChunkManager(scene, sections) {
-  /** @type {Map<number, {objects:any[], updatables:any[]}>} */
+  /** @type {Map<string, {objects:any[], updatables:any[]}>} */
   const live = new Map();
+
+  /* Every streamable stretch of route, districts and interludes together, so
+   * the streaming logic below is written once. */
+  const zones = [
+    ...sections.map((section, i) => ({
+      key: `district-${i}`,
+      anchor: cfg.SECTION_ANCHORS[i],
+      build: () => buildDistrict(section, cfg.SECTION_ANCHORS[i], i),
+    })),
+    ...(cfg.INTERLUDE_ANCHORS ?? []).map((anchor, i) => ({
+      key: `interlude-${i}`,
+      anchor,
+      build: () => buildInterlude(anchor, i),
+    })),
+  ].filter((z) => z.anchor !== undefined);
 
   function mount(index) {
     if (live.has(index)) return;
-    const section = sections[index];
-    const u = cfg.SECTION_ANCHORS[index];
-    if (!section || u === undefined) return;
+    const zone = zones.find((z) => z.key === index);
+    if (!zone) return;
 
-    const chunk = buildDistrict(section, u, index);
+    const chunk = zone.build();
     for (const obj of chunk.objects) scene.add(obj);
     live.set(index, chunk);
   }
@@ -40,9 +60,9 @@ export function createChunkManager(scene, sections) {
 
   /** Called every frame with the current normalised progress. */
   function update(progress, dt) {
-    for (let i = 0; i < sections.length; i++) {
-      const anchor = cfg.SECTION_ANCHORS[i];
-      if (anchor === undefined) continue;
+    for (const zone of zones) {
+      const { anchor } = zone;
+      const i = zone.key;
       /* A district's content runs forward from its anchor, so the window is
        * asymmetric: reach further ahead than behind. Both edges are measured
        * the short way round the loop, or the district either side of the
@@ -63,7 +83,7 @@ export function createChunkManager(scene, sections) {
 
   /** Build everything at once — used to warm the world before Enter. */
   function mountAll() {
-    for (let i = 0; i < sections.length; i++) mount(i);
+    for (const zone of zones) mount(zone.key);
   }
 
   function disposeAll() {

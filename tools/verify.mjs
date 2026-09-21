@@ -140,17 +140,24 @@ check(
   `pos ${JSON.stringify(down.pos)}`
 );
 
-/* Districts mount as you reach them and unmount once you have left. On the
- * loop the sections are spread evenly, so this is about the set CHANGING as
- * you travel, not about there being more of them in the middle. */
-const onDistrict = await at(HARBOUR);
-const betweenDistricts = await at(0.9); // the monument straight, no district
+/* Zones mount as you reach them and unmount once you have left. Districts and
+ * landmark zones together now cover the whole loop, so what matters is that
+ * there is always something loaded AND that it is being streamed rather than
+ * all held at once. */
+const coverage = [];
+for (let i = 0; i < 12; i++) coverage.push((await at(i / 12)).stats.chunks);
+const mostAtOnce = Math.max(...coverage);
 check(
-  onDistrict.stats.chunks > 0 && betweenDistricts.stats.chunks < onDistrict.stats.chunks,
-  'chunks stream in and out as the camera travels',
-  `${onDistrict.stats.chunks} at a district, ${betweenDistricts.stats.chunks} between them`
+  Math.min(...coverage) > 0,
+  'some zone is loaded everywhere on the loop',
+  `live zones around the lap: ${coverage.join(', ')}`
 );
-const mid = onDistrict;
+check(
+  mostAtOnce < 10,
+  'and they stream rather than all staying resident',
+  `never more than ${mostAtOnce} live at once`
+);
+const mid = await at(HARBOUR);
 check(
   mid.stats.calls < 150,
   'draw calls stay inside the 150 budget',
@@ -331,7 +338,10 @@ const tallyFor = (audit, district, key) =>
 
 await at(PLAZA);
 const plaza = await sceneAudit();
-const plazaScenery = plaza.instanced.filter((m) => m.name.startsWith('scenery-'));
+/* This district's own batches. Landmark zones either side are live too, and
+ * have their own pair — the point of the check is that ONE zone's props all
+ * land in one static mesh and one animated one. */
+const plazaScenery = plaza.instanced.filter((m) => m.name.startsWith('scenery-plaza'));
 
 check(
   plazaScenery.length === 2,
@@ -385,6 +395,48 @@ check(
   tallyFor(plaza, 'plaza', 'green') > 20,
   'the plaza is planted',
   `${tallyFor(plaza, 'plaza', 'green')} green cubes`
+);
+
+/* The landmark zones that fill the route between districts. */
+await at(0.3);
+const interlude = await sceneAudit();
+check(
+  interlude.instanced.some((m) => m.name.startsWith('scenery-interlude')),
+  'landmark zones fill the route between districts',
+  interlude.instanced
+    .filter((m) => m.name.startsWith('scenery-interlude'))
+    .map((m) => `${m.name}:${m.count}`)
+    .join(' ') || 'none live'
+);
+
+/* Nothing may stand taller than the camera can show.
+ *
+ * There is no sky in this shot — at pitch 38 and FOV 30 the frame is all
+ * ground — so a prop much over the landmark budget is drawn every frame with
+ * its top cut off above the viewport. That is how the first pass at these
+ * landmarks went out: 66-unit towers of which only the legs were ever
+ * visible. */
+const tallest = await page.evaluate(() => {
+  const out = [];
+  window.__site.world.scene.traverse((o) => {
+    if (!o.isInstancedMesh || !o.name.startsWith('scenery-')) return;
+    const a = o.instanceMatrix.array;
+    let top = 0;
+    for (let i = 0; i < o.count; i++) {
+      const m = a.subarray(i * 16, i * 16 + 16);
+      // column 1 is the Y axis; its length is the instance's Y scale
+      const scaleY = Math.hypot(m[4], m[5], m[6]);
+      top = Math.max(top, m[13] + scaleY / 2);
+    }
+    out.push({ name: o.name, top: +top.toFixed(1) });
+  });
+  return out;
+});
+const worstProp = tallest.reduce((a, b) => (b.top > a.top ? b : a), { top: 0, name: '-' });
+check(
+  worstProp.top <= 26,
+  'no prop stands taller than the camera can frame',
+  `tallest is ${worstProp.top} units in ${worstProp.name}`
 );
 
 /* A chunk that unloads and comes back must be identical, or scrubbing back
@@ -929,13 +981,25 @@ if (flight) {
   );
 
   const closest = Math.min(...samples.map((s) => s.dist));
-  const behind = samples.some((s) => s.n < -2);
-  const inFront = samples.some((s) => s.n > 2);
-  // "Between the blocks" means inside the slab's own footprint, not merely
-  // near it: within the lettering sideways and below the top of the wall.
-  const between = samples.some(
-    (s) => Math.abs(s.n) < 4 && Math.abs(s.lat) < width / 2 && s.y > 0 && s.y < height
-  );
+  /* "Between the blocks" means inside the slab's own footprint, not merely
+   * near it: within the lettering sideways and below the top of the wall.
+   *
+   * Found by interpolating the moment the camera CROSSES the wall plane,
+   * rather than hoping a sample lands inside it. The pass is fast and this
+   * runs under a software rasteriser at about ten frames a second, so
+   * samples are ~100ms apart and routinely step straight over the wall. */
+  let between = false;
+  let crossed = false;
+  for (let i = 1; i < samples.length; i++) {
+    const a = samples[i - 1];
+    const b = samples[i];
+    if (a.n > 0 === b.n > 0) continue; // no crossing between these two
+    crossed = true;
+    const t = a.n / (a.n - b.n); // where between them n hits zero
+    const lat = a.lat + (b.lat - a.lat) * t;
+    const y = a.y + (b.y - a.y) * t;
+    if (Math.abs(lat) < width / 2 && y > 0 && y < height) between = true;
+  }
   const settled = samples[samples.length - 1].dist;
 
   check(
@@ -943,7 +1007,11 @@ if (flight) {
     'the Enter transition passes the monument at close range',
     `closest approach ${closest.toFixed(1)} units`
   );
-  check(behind && inFront, 'it passes right through the wall of blocks');
+  check(
+    crossed,
+    'it passes right through the wall of blocks',
+    `n runs ${samples[0].n.toFixed(0)} → ${samples[samples.length - 1].n.toFixed(0)}`
+  );
   check(between, 'and does so between the blocks, inside the lettering');
   check(
     settled > closest * 3,

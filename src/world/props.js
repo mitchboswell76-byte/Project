@@ -360,3 +360,361 @@ export function snowSheet(paint, { rng } = {}) {
     paint((rng() - 0.5) * s * 0.5, 0.35, (rng() - 0.5) * s * 0.5, s * 0.4, 0.3, s * 0.35, P.snow);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Landmarks                                                           */
+/* ------------------------------------------------------------------ */
+/* Big set pieces for the stretches between districts, where the route
+ * would otherwise be empty road. Each is designed here as a voxel form —
+ * generic structures and original creatures, nothing traced from anywhere
+ * and no branded or copyrighted character. */
+
+/**
+ * An iron lattice tower: four splayed legs, an arch between them, two
+ * platforms and a mast. The shape of every large 19th-century exhibition
+ * tower, built here out of cubes.
+ */
+export function latticeTower(paint, { rng } = {}) {
+  const metal = P.trunk;
+  const LEGS = [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ];
+
+  // Legs: splayed at the bottom, drawing in as they rise.
+  const SEGMENTS = 16;
+  for (let i = 0; i < SEGMENTS; i++) {
+    const t = i / SEGMENTS;
+    const spread = 9.5 * (1 - t) ** 1.6 + 1.1;
+    const y = 2 + t * 30;
+    const thick = 1.5 - t * 0.7;
+    for (const [sx, sz] of LEGS) {
+      paint(sx * spread, y, sz * spread, thick, 2.4, thick, metal);
+    }
+  }
+
+  // The arch between the legs, and the platforms.
+  for (let i = 0; i <= 10; i++) {
+    const a = (i / 10) * Math.PI;
+    paint(Math.cos(a) * 8.5, 9 + Math.sin(a) * 3.2, -8.5, 1.5, 1.2, 1.5, metal);
+    paint(Math.cos(a) * 8.5, 9 + Math.sin(a) * 3.2, 8.5, 1.5, 1.2, 1.5, metal);
+  }
+  paint(0, 12.5, 0, 17, 1.2, 17, metal);
+  paint(0, 22, 0, 9.5, 1.0, 9.5, metal);
+
+  // Upper shaft, the lookout and the mast.
+  for (let i = 0; i < 12; i++) {
+    const y = 32 + i * 2.2;
+    const w = 3.4 - i * 0.16;
+    paint(0, y, 0, w, 2.2, w, metal);
+  }
+  paint(0, 59, 0, 5.4, 1.6, 5.4, metal);
+  paint(0, 62.5, 0, 2.2, 5.5, 2.2, metal);
+  paint(0, 66, 0, 0.7, 3.0, 0.7, accent(rng));
+}
+
+/** A big wheel: a ring of cabins on spokes, on an A-frame. */
+export function ferrisWheel(paint, { rng, animPaint } = {}) {
+  const R = 15;
+  const hub = 18;
+  const metal = P.metal;
+
+  // A-frame legs and hub.
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8;
+      paint(sx * (6.5 - t * 6), 1.5 + t * hub, 0, 1.3, 2.6, 1.3, metal);
+    }
+  }
+  paint(0, hub, 0, 2.4, 2.4, 4.2, metal);
+
+  // Rim and spokes.
+  const N = 20;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const x = Math.cos(a) * R;
+    const y = hub + Math.sin(a) * R;
+    paint(x, y, 0, 1.5, 1.5, 1.5, metal);
+    // every other spoke, so the wheel reads without a solid disc
+    if (i % 2 === 0) {
+      for (let k = 1; k < 5; k++) {
+        const f = k / 5;
+        paint(x * f, hub + Math.sin(a) * R * f, 0, 0.7, 0.7, 0.7, metal);
+      }
+      // A cabin hangs below each spoke end, and rocks gently.
+      const put = animPaint ?? paint;
+      put(x * 1.06, y * 1.0 - 2.2, 0, 2.2, 1.9, 2.6, accent(rng), 0, {
+        sway: 0.18,
+        speed: 0.6,
+        phase: i,
+      });
+    }
+  }
+}
+
+/** A windmill: a stone tower, a cap and four sails. */
+export function windmill(paint, { rng } = {}) {
+  for (let i = 0; i < 7; i++) {
+    const w = 7.5 - i * 0.55;
+    paint(0, 1.6 + i * 3, 0, w, 3, w, i % 2 ? P.sand : P.metal);
+  }
+  paint(0, 23.5, 0, 6.2, 3.2, 6.2, P.roof);
+  paint(0, 26, 0, 3.4, 2, 3.4, P.roof);
+  // Sails on the front face.
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2 + 0.5;
+    for (let k = 2; k <= 9; k++) {
+      paint(Math.cos(a) * k, 21 + Math.sin(a) * k, 4.2, 1.5, 1.5, 0.8, k > 3 ? P.snow : P.trunk);
+    }
+  }
+  paint(0, 21, 4.6, 1.6, 1.6, 1.6, P.trunk);
+  if (rng() > 0.5) paint(0, 21, 5.6, 0.8, 0.8, 0.8, accent(rng));
+}
+
+/** A castle: curtain wall, crenellations, corner towers and a keep. */
+export function castle(paint, { rng } = {}) {
+  const stone = P.metal;
+  const W = 13;
+
+  // Curtain walls with crenellations along the top.
+  for (const [dx, dz, ax] of [
+    [0, -W, 1],
+    [0, W, 1],
+    [-W, 0, 0],
+    [W, 0, 0],
+  ]) {
+    const w = ax ? W * 2 : 2.4;
+    const d = ax ? 2.4 : W * 2;
+    paint(dx, 4, dz, w, 8, d, stone);
+    const n = 9;
+    for (let i = 0; i < n; i++) {
+      const f = (i / (n - 1) - 0.5) * (W * 2 - 2);
+      paint(ax ? f : dx, 8.8, ax ? dz : f, 1.6, 1.6, 1.6, stone);
+    }
+  }
+
+  // Corner towers, each with a conical roof.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      paint(sx * W, 7, sz * W, 5.4, 14, 5.4, stone);
+      paint(sx * W, 14.6, sz * W, 6.2, 1.2, 6.2, stone);
+      paint(sx * W, 16, sz * W, 4.6, 1.8, 4.6, P.roof);
+      paint(sx * W, 17.6, sz * W, 2.6, 1.8, 2.6, P.roof);
+      paint(sx * W, 19.2, sz * W, 0.6, 2.2, 0.6, accent(rng));
+    }
+  }
+
+  // Keep.
+  paint(0, 9, 0, 11, 18, 11, stone);
+  paint(0, 18.6, 0, 12, 1.2, 12, stone);
+  paint(0, 20.4, 0, 8, 2.4, 8, P.roof);
+  paint(0, 22.4, 0, 4, 2, 4, P.roof);
+  // Gate.
+  paint(0, 3, W + 0.3, 4, 6, 1.2, P.trunk);
+}
+
+/** A lighthouse: banded tapering tower, lamp room and gallery. */
+export function lighthouse(paint, { rng } = {}) {
+  paint(0, 0.8, 0, 13, 1.6, 13, P.metal);
+  for (let i = 0; i < 9; i++) {
+    const w = 6.6 - i * 0.42;
+    paint(0, 2.6 + i * 2.6, 0, w, 2.6, w, i % 2 ? P.roof : P.snow);
+  }
+  paint(0, 26.5, 0, 6.4, 1.2, 6.4, P.metal);
+  paint(0, 28.6, 0, 4.2, 3, 4.2, palette.accents[1]);
+  paint(0, 31, 0, 5, 1.4, 5, P.roof);
+  paint(0, 32.4, 0, 1.6, 1.6, 1.6, P.roof);
+  if (rng() > 0.5) paint(0, 33.6, 0, 0.6, 1.6, 0.6, P.metal);
+}
+
+/** A rocket on a launch gantry. */
+export function rocket(paint, { rng } = {}) {
+  // Pad and gantry.
+  paint(0, 0.5, 0, 16, 1, 16, P.metal);
+  for (let i = 0; i < 9; i++) {
+    paint(6.5, 2 + i * 3, 0, 1.4, 3, 1.4, P.trunk);
+    if (i % 2 === 0) paint(4.6, 2 + i * 3, 0, 3, 0.8, 1.2, P.trunk);
+  }
+  // Body, fins and nose.
+  for (let i = 0; i < 9; i++) paint(0, 2.4 + i * 3, 0, 4.6, 3, 4.6, i % 3 ? P.snow : P.roof);
+  paint(0, 30, 0, 3.6, 2.6, 3.6, P.snow);
+  paint(0, 32.4, 0, 2.4, 2.4, 2.4, P.roof);
+  paint(0, 34.4, 0, 1.2, 2, 1.2, P.roof);
+  for (const [fx, fz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]) {
+    paint(fx * 3, 3.2, fz * 3, fx ? 2.2 : 1.2, 5, fz ? 2.2 : 1.2, P.roof);
+  }
+  paint(0, 1.6, 0, 5.6, 1.2, 5.6, accent(rng));
+}
+
+/**
+ * A low, stepped hill for the horizon.
+ *
+ * Wide and shallow on purpose: tall tiers at this scale read as a green wall
+ * across the top of the frame rather than as landscape. Each tier is offset a
+ * little so the silhouette breaks up instead of stacking into a ziggurat.
+ */
+export function hill(paint, { rng, snow = false } = {}) {
+  const tiers = 4 + ((rng() * 3) | 0);
+  /* Small, and taller than it is wide-ish. The camera only ever sees about
+   * 100 x 130 units of ground, so a "hill" of 50 units across is not a
+   * horizon, it is a green wall through the middle of the shot — and a wide
+   * one with two tiers reads as a plateau rather than a mound. */
+  const base = 10 + rng() * 10;
+  let dx = 0;
+  let dz = 0;
+  for (let i = 0; i < tiers; i++) {
+    const t = i / tiers;
+    const w = base * (1 - t * 0.78);
+    dx += (rng() - 0.5) * w * 0.2;
+    dz += (rng() - 0.5) * w * 0.2;
+    paint(
+      dx,
+      1.1 + i * 2.1,
+      dz,
+      w,
+      2.2,
+      w * (0.72 + rng() * 0.3),
+      snow && i >= tiers - 2 ? P.snow : i % 2 ? P.leafDark : P.leaf
+    );
+  }
+}
+
+/** A hot-air balloon. Floats, so it goes in the animated batch. */
+export function balloon(paint, { rng } = {}) {
+  const colour = accent(rng);
+  const other = accent(rng);
+  const anim = { bob: 1.1, sway: 0.5, speed: 0.35 + rng() * 0.25, phase: rng() * 6.283 };
+  const profile = [
+    [0, 5.6],
+    [2.2, 6.4],
+    [4.4, 6.0],
+    [6.4, 4.8],
+    [8.0, 3.0],
+  ];
+  for (const [y, w] of profile) {
+    paint(0, 9 + y, 0, w, 2.3, w, y % 4 < 2 ? colour : other, 0, anim);
+  }
+  paint(0, 8.0, 0, 2.4, 1.2, 2.4, P.trunk, 0, anim);
+  for (const [sx, sz] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ]) {
+    paint(sx * 1.1, 6.6, sz * 1.1, 0.3, 2.2, 0.3, P.trunk, 0, anim);
+  }
+  paint(0, 5.2, 0, 3.0, 2.4, 3.0, P.trunk, 0, anim);
+}
+
+/* ------------------------------------------------------------------ */
+/* Creatures                                                           */
+/* ------------------------------------------------------------------ */
+/* Original voxel creatures, designed here. Deliberately generic: a round
+ * critter, a long-necked grazer and a fat little bird. They are meant to
+ * read as "some creature lives here", not as anyone else's character. */
+
+/** A round, stumpy critter with ear tufts and a striped tail. */
+export function critter(paint, { rng } = {}) {
+  const coat = rng() > 0.5 ? P.orange : accent(rng);
+  const belly = P.sand;
+  paint(0, 1.5, 0, 2.6, 2.2, 3.0, coat); // body
+  paint(0, 1.2, 1.0, 2.0, 1.4, 1.2, belly); // belly patch
+  paint(0, 3.1, 1.0, 2.2, 2.0, 2.0, coat); // head
+  paint(0, 3.0, 2.1, 1.2, 0.8, 0.5, belly); // snout
+  for (const sx of [-0.62, 0.62]) {
+    paint(sx, 4.4, 0.9, 0.55, 1.2, 0.5, coat); // ear tufts
+    paint(sx * 1.1, 3.3, 2.0, 0.34, 0.34, 0.3, palette.background); // eyes
+    paint(sx, 0.4, 1.0, 0.7, 0.8, 0.8, coat); // front legs
+    paint(sx, 0.4, -1.0, 0.8, 0.8, 0.9, coat); // back legs
+  }
+  // Tail, striped, held up.
+  for (let i = 0; i < 4; i++) {
+    paint(0, 2.4 + i * 0.85, -1.7 - i * 0.22, 0.75, 0.9, 0.75, i % 2 ? belly : coat);
+  }
+}
+
+/** A long-necked grazer, head down. */
+export function grazer(paint, { rng } = {}) {
+  const coat = rng() > 0.5 ? P.leafDark : P.metal;
+  const spot = accent(rng);
+  paint(0, 3.2, 0, 2.8, 2.6, 5.4, coat);
+  paint(0.8, 3.6, 0.6, 1.4, 1.2, 1.6, spot);
+  for (const sz of [-1.8, 1.8]) {
+    for (const sx of [-0.9, 0.9]) paint(sx, 1.5, sz, 0.8, 3.2, 0.8, coat);
+  }
+  // Neck, sloping forward and down.
+  for (let i = 0; i < 5; i++) {
+    paint(0, 5.2 + i * 0.9, 2.6 + i * 0.75, 1.3, 1.2, 1.3, coat);
+  }
+  paint(0, 9.4, 6.6, 1.5, 1.3, 2.2, coat);
+  paint(0, 9.0, 7.6, 1.0, 0.7, 0.8, spot);
+  paint(0, 3.6, -3.1, 0.5, 2.4, 0.5, spot); // tail
+}
+
+/** A fat little bird. */
+export function bird(paint, { rng } = {}) {
+  const coat = accent(rng);
+  paint(0, 1.1, 0, 1.5, 1.5, 1.9, coat);
+  paint(0, 2.3, 0.45, 1.2, 1.1, 1.2, coat);
+  paint(0, 2.2, 1.15, 0.5, 0.45, 0.6, palette.accents[1]); // beak
+  for (const sx of [-0.45, 0.45]) {
+    paint(sx, 2.45, 1.0, 0.26, 0.26, 0.22, palette.background); // eyes
+    paint(sx * 1.85, 1.2, -0.1, 0.35, 0.9, 1.3, coat); // wings
+    paint(sx * 0.45, 0.2, 0.2, 0.3, 0.4, 0.5, palette.accents[1]); // feet
+  }
+  paint(0, 1.3, -1.2, 0.7, 0.9, 0.7, coat); // tail
+}
+
+/**
+ * A boulder, or a cluster of them. Low and squat: a cube of any size sitting
+ * on the ground reads as a crate, so these are kept wider than they are tall
+ * and mostly grey, which reads as stone.
+ */
+export function rock(paint, { rng, snow = false } = {}) {
+  const n = 1 + ((rng() * 3) | 0);
+  for (let i = 0; i < n; i++) {
+    const s = 0.8 + rng() * 1.5;
+    const x = (rng() - 0.5) * 2.8;
+    const z = (rng() - 0.5) * 2.8;
+    const h = s * (0.42 + rng() * 0.22);
+    paint(x, h / 2, z, s, h, s * (0.7 + rng() * 0.5), rng() > 0.25 ? P.metal : P.trunk, rng() * 3);
+    if (snow) paint(x, h + 0.12, z, s * 0.9, 0.24, s * 0.7, P.snow);
+  }
+}
+
+/** A run of post-and-rail fence, along the prop's own +z. */
+export function fence(paint, { rng } = {}) {
+  const posts = 4 + ((rng() * 3) | 0);
+  const step = 2.6;
+  for (let i = 0; i < posts; i++) {
+    paint(0, 0.85, i * step, 0.32, 1.7, 0.32, P.trunk);
+    if (i < posts - 1) {
+      paint(0, 1.3, i * step + step / 2, 0.18, 0.28, step, P.trunk);
+      paint(0, 0.7, i * step + step / 2, 0.18, 0.28, step, P.trunk);
+    }
+  }
+}
+
+/** A bench beside the route. */
+export function bench(paint, { rng } = {}) {
+  const wood = rng() > 0.5 ? P.trunk : P.sand;
+  paint(0, 0.5, 0, 3.2, 0.3, 1.0, wood);
+  paint(0, 1.0, -0.42, 3.2, 1.0, 0.25, wood);
+  for (const sx of [-1.3, 1.3]) paint(sx, 0.25, 0, 0.3, 0.5, 0.9, P.metal);
+}
+
+/* Natural height of each landmark, in world units. districts.js scales
+ * them to scenery.LANDMARK_HEIGHT so they fit the camera's frame. */
+latticeTower.height = 66;
+ferrisWheel.height = 34;
+windmill.height = 27;
+castle.height = 24;
+lighthouse.height = 34;
+rocket.height = 36;
