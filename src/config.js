@@ -23,7 +23,7 @@ export const palette = {
 
   /* Typography */
   ink: 0xf2f2f5, // primary white text
-  inkMuted: 0x7a7a88, // secondary grey text
+  inkMuted: 0x9a9aa8, // secondary grey text
   voxelGrey: 0x9a9aa6, // default colour of voxel heading cubes
 
   /* Accents — used for flickering pixels, scattered voxels and props.
@@ -449,7 +449,7 @@ export const overlay = {
    * the default font size; past that, every extra pixel is scene it hides for
    * no reason. */
   SCRIM_WIDTH_PX: 260,
-  SCRIM_HEIGHT_PX: 480,
+  SCRIM_HEIGHT_PX: 620,
   SCRIM_ALPHA: 0.94, // opacity at the corner, where the controls are
 
   /* On a narrow screen the overlay stops having a column of its own and the
@@ -480,7 +480,7 @@ export const doc = {
 
 export const audio = {
   BASE: 'audio/', // relative to the site root; works under a sub-path
-  FORMATS: ['mp3', 'ogg', 'wav'],
+  FORMATS: ['wav'],
   THEME: 'theme',
   SFX: ['sfx-enter', 'sfx-nav', 'sfx-toggle'],
 
@@ -492,7 +492,7 @@ export const audio = {
   /* sessionStorage key holding 'on' or 'off'. sessionStorage, not
    * localStorage: a sound preference should not outlive the visit. */
   STORAGE_KEY: 'mb.sound',
-  DEFAULT_ON: true,
+  DEFAULT_ON: false,
 };
 
 /* ------------------------------------------------------------------ */

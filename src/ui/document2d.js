@@ -1,56 +1,6 @@
-/**
- * document2d.js — 2D mode: the same content as a genuine document.
- *
- * This is not a screenshot of the 3D world and not a stripped-down summary.
- * It is the site's content as semantic HTML: one `<h1>`, `<h2>` per section
- * in source order, real paragraphs you can select, search, print, translate
- * and read with a screen reader, and real links.
- *
- * It is built from the same `content.js` as the world, so the two can never
- * say different things, and it does not import Three.js — 2D mode has to
- * work with WebGL switched off entirely.
- *
- * The headings are drawn with the same 5x7 bitmap font as the wordmark and
- * the voxel headings, as an image inside the `<h2>`. The heading's real text
- * sits next to it in the accessibility tree, so the document outline is
- * correct even though the visible heading is a pixel image; the section
- * number and label above it are ordinary selectable text.
- */
-
+/** Semantic reading view, built from the shared portfolio content. */
 import { content } from '../content.js';
-import { doc as cfg, hex, palette } from '../config.js';
-import { rasteriseLine, toCoords } from '../world/bitmapFont.js';
-import { applyDotGridCss } from './dotGrid.js';
-
-/* ------------------------------------------------------------------ */
-/* Bitmap-font heading → data URI                                      */
-/* ------------------------------------------------------------------ */
-
-function pixelHeadingImg(text) {
-  const grid = rasteriseLine(text, 1);
-  const coords = toCoords(grid);
-  const step = cfg.HEADING_PIXEL_PX + cfg.HEADING_GAP_PX;
-  const w = Math.max(1, grid.width * step - cfg.HEADING_GAP_PX);
-  const h = grid.height * step - cfg.HEADING_GAP_PX;
-
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = hex(palette.ink);
-  for (const p of coords) {
-    ctx.fillRect(p.x * step, p.y * step, cfg.HEADING_PIXEL_PX, cfg.HEADING_PIXEL_PX);
-  }
-
-  const img = document.createElement('img');
-  img.src = c.toDataURL('image/png');
-  img.alt = ''; // the real text is in the sibling span
-  img.setAttribute('aria-hidden', 'true');
-  img.className = 'doc__pixels';
-  img.style.maxWidth = `${w}px`;
-  return img;
-}
+import { doc as cfg } from '../config.js';
 
 const el = (tag, className, text) => {
   const n = document.createElement(tag);
@@ -68,15 +18,16 @@ export function createDocument2d() {
   const ui = content.ui.doc;
 
   root.innerHTML = '';
-  applyDotGridCss(root, cfg.DOT_SPACING_PX, cfg.DOT_SIZE_PX);
 
   const article = el('article', 'doc__article');
 
   /* ---------------- header ---------------- */
   const header = el('header', 'doc__header');
+  header.appendChild(el('p', 'doc__kicker', content.meta.discipline));
   header.appendChild(el('h1', 'doc__title', content.meta.siteName));
   header.appendChild(el('p', 'doc__tagline', content.meta.tagline));
   header.appendChild(el('p', 'doc__intro', ui.intro));
+  header.appendChild(el('p', 'doc__status', content.meta.status));
   article.appendChild(header);
 
   /* ---------------- sections ---------------- */
@@ -91,13 +42,40 @@ export function createDocument2d() {
 
     const h2 = el('h2', 'doc__heading');
     h2.id = `doc-${s.id}-h`;
-    h2.appendChild(pixelHeadingImg(s.voxelHeading));
-    h2.appendChild(el('span', 'visually-hidden', s.voxelHeading));
+    h2.appendChild(el('span', 'doc__heading-text', s.voxelHeading));
     sec.appendChild(h2);
 
     sec.appendChild(el('p', 'doc__sub', s.subLabel));
     s.body.forEach((para) => sec.appendChild(el('p', 'doc__body', para)));
 
+    if (s.tags) {
+      const tags = el('ul', 'doc__tags');
+      s.tags.forEach(tag => tags.appendChild(el('li', null, tag)));
+      sec.appendChild(tags);
+    }
+    if (s.cards) {
+      const cards = el('div', 'doc__cards');
+      s.cards.forEach(card => {
+        const item = el('article', 'doc__card');
+        item.appendChild(el('p', 'doc__card-label', card.label));
+        item.appendChild(el('h3', 'doc__card-title', card.title));
+        item.appendChild(el('p', 'doc__card-body', card.text));
+        if (card.link) {
+          const link = el('a', 'doc__card-link', card.link.label);
+          link.href = card.link.url;
+          item.appendChild(link);
+        }
+        cards.appendChild(item);
+      });
+      sec.appendChild(cards);
+    }
+    if (s.id === 'connect') {
+      content.contact.links.forEach(link => {
+        const a = el('a', 'doc__cta', link.label);
+        a.href = link.url;
+        sec.appendChild(a);
+      });
+    }
     article.appendChild(sec);
     sectionEls.push(sec);
   });
@@ -117,11 +95,13 @@ export function createDocument2d() {
   contact.appendChild(el('h2', 'doc__heading doc__heading--plain', ui.contactHeading));
 
   const list = el('ul', 'doc__links');
+  if (content.contact.email) {
   const mail = el('li');
   const mailA = el('a', null, content.contact.email);
   mailA.href = `mailto:${content.contact.email}`;
   mail.appendChild(mailA);
   list.appendChild(mail);
+  }
 
   content.contact.links.forEach((l) => {
     const li = el('li');
@@ -143,7 +123,19 @@ export function createDocument2d() {
   contact.appendChild(list);
   article.appendChild(contact);
 
+  const footer = el('footer', 'doc__footer');
+  footer.appendChild(el('span', null, 'Mitch Boswell / 2026'));
+  const top = el('button', null, ui.backToTop);
+  top.type = 'button';
+  top.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' });
+    root.focus({ preventScroll: true });
+  });
+  footer.appendChild(top);
+  article.appendChild(footer);
+  root.tabIndex = -1;
   root.appendChild(article);
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ------------------------------------------------------------------ */
   /* API                                                                 */
@@ -164,8 +156,9 @@ export function createDocument2d() {
     scrollToSection(i, behaviour = cfg.SCROLL_BEHAVIOUR) {
       const target = sectionEls[Math.max(0, Math.min(sectionEls.length - 1, i))];
       if (!target) return;
-      const top = target.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top, behavior: behaviour });
+      const offset = window.innerWidth < 900 ? 154 : 36;
+      const top = target.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top, behavior: reduced() ? 'auto' : behaviour });
     },
 
     /**

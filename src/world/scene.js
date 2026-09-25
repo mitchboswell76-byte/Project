@@ -103,6 +103,7 @@ export function createWorld(canvas) {
     progress: 0,
     intro: 1,
     running: false,
+    renderedProgress: null,
     /* Camera zoom, as an index into camera.ZOOM_STEPS. Held here rather than
      * in the camera module so it survives a resize and so applyProgress stays
      * a pure function of (progress, zoom). */
@@ -129,6 +130,7 @@ export function createWorld(canvas) {
     if (monument) monument.update(dt);
 
     renderer.render(scene, cam);
+    state.renderedProgress = state.progress;
     raf = requestAnimationFrame(frame);
   }
 
@@ -168,6 +170,7 @@ export function createWorld(canvas) {
     },
 
     getProgress: () => state.progress,
+    getRenderedProgress: () => state.renderedProgress,
 
     /**
      * Step the zoom. `direction` is +1 to pull back, -1 to move in.

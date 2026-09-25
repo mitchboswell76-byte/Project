@@ -1,348 +1,206 @@
-/**
- * main.js — bootstrap and mode switching.
- *
- * Responsibilities:
- *   - push the palette from config.js into CSS custom properties
- *   - detect capability (WebGL / viewport / reduced motion)
- *   - paint the entry gate immediately, and build the world behind it
- *   - hand control from the Enter transition to the scroll driver
- *   - own the single source of truth for view mode (3D world / 2D document)
- *     and for sound, and keep the overlay in step with both
- *
- * Narrow screens, `prefers-reduced-motion` and machines without WebGL all
- * START in the reading view (capability.prefer2d). Only the no-WebGL case
- * loses the 3D control; the other two keep the toggle, so anyone who wants
- * the world can still have it.
- */
-
 import './style.css';
 import gsap from 'gsap';
-
 import { content } from './content.js';
-import {
-  camera as camCfg,
-  doc as docCfg,
-  fallback,
-  hex,
-  overlay as overlayCfg,
-  palette,
-  world as worldCfg,
-} from './config.js';
+import { camera as camCfg, doc as docCfg, fallback, hex, overlay as overlayCfg, palette, world as worldCfg } from './config.js';
 import { progressForSection, sectionAtProgress } from './sections.js';
 import { createEntryScreen } from './ui/entry.js';
 import { createOverlay } from './ui/overlay.js';
 import { createDocument2d } from './ui/document2d.js';
 import { createAudio } from './audio/audio.js';
-import { createWorld } from './world/scene.js';
-import { createScrollDriver, scrollHeightVh } from './world/scroll.js';
 
-/* ------------------------------------------------------------------ */
-/* Palette → CSS custom properties                                     */
-/* ------------------------------------------------------------------ */
-/* Editing config.js therefore restyles the CSS layer too, so the palette
- * genuinely lives in one file. */
 function applyPalette() {
   const root = document.documentElement.style;
-  root.setProperty('--bg', hex(palette.background));
-  root.setProperty('--grid', hex(palette.grid));
-  root.setProperty('--ink', hex(palette.ink));
-  root.setProperty('--ink-muted', hex(palette.inkMuted));
-  root.setProperty('--beam', hex(palette.beam));
+  for (const [key, value] of Object.entries({ bg: palette.background, grid: palette.grid, ink: palette.ink, 'ink-muted': palette.inkMuted, beam: palette.beam })) root.setProperty(`--${key}`, hex(value));
   palette.accents.forEach((c, i) => root.setProperty(`--accent-${i}`, hex(c)));
-
-  // The overlay scrim is a gradient of the background colour, so it needs
-  // the same value as RGB components rather than as a hex string.
   const b = palette.background;
-  root.setProperty('--bg-rgb', `${(b >> 16) & 255}, ${(b >> 8) & 255}, ${b & 255}`);
-
-  // Layout constants that CSS needs but config.js owns.
+  root.setProperty('--bg-rgb', `${b >> 16 & 255}, ${b >> 8 & 255}, ${b & 255}`);
   root.setProperty('--scrim-w', `${overlayCfg.SCRIM_WIDTH_PX}px`);
   root.setProperty('--scrim-h', `${overlayCfg.SCRIM_HEIGHT_PX}px`);
   root.setProperty('--scrim-alpha', String(overlayCfg.SCRIM_ALPHA));
   root.setProperty('--measure', `${docCfg.MEASURE_CH}ch`);
-  root.setProperty('--doc-top-narrow', `${overlayCfg.NARROW_DOC_TOP_PX}px`);
 }
-
-/* ------------------------------------------------------------------ */
-/* Capability detection                                                */
-/* ------------------------------------------------------------------ */
-
 function hasWebGL() {
   try {
-    const c = document.createElement('canvas');
-    return Boolean(
-      window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))
-    );
-  } catch {
-    return false;
-  }
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return false;
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return true;
+  } catch { return false; }
 }
-
-function prefersReducedMotion() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
-
 export const capability = {
-  webgl: hasWebGL(),
-  narrow: window.innerWidth < fallback.MOBILE_BREAKPOINT_PX,
-  reducedMotion: prefersReducedMotion(),
+  webgl: hasWebGL(), narrow: innerWidth < fallback.MOBILE_BREAKPOINT_PX,
+  reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
 };
-
-/** 2D is the default on narrow screens, reduced motion, or no WebGL. */
 capability.prefer2d = !capability.webgl || capability.narrow || capability.reducedMotion;
-
-/* ------------------------------------------------------------------ */
-/* Boot                                                                */
-/* ------------------------------------------------------------------ */
-
 const DEBUG = new URLSearchParams(location.search).has('debug');
 
 function boot() {
   applyPalette();
-  document.title = content.meta.siteName;
+  document.title = `${content.meta.siteName} — Politics, people & what comes next`;
   document.body.classList.add('is-locked', 'mode-3d');
-  /* The narrow-screen layout is decided by fallback.MOBILE_BREAKPOINT_PX in
-   * config.js, not by a second breakpoint written into the stylesheet. */
-  document.body.classList.toggle('is-narrow', capability.narrow);
-
+  const resize = () => document.body.classList.toggle('is-narrow', innerWidth < fallback.MOBILE_BREAKPOINT_PX);
+  resize();
+  window.addEventListener('resize', resize);
   const spacer = document.getElementById('scroll-spacer');
-  spacer.style.height = `${scrollHeightVh()}vh`;
-
-  const entry = createEntryScreen({ onEnter: enterSite });
+  let createScrollDriver = null;
   const sound = createAudio();
+  let world = null, worldPromise = null, scroller = null, overlay = null, doc2d = null;
+  let mode = '3d', entered = false, parkedProgress = 0, parkedSection = 0, introTween = null, modeRequest = 0;
+  const entry = createEntryScreen({ onEnter: () => enterSite(capability.prefer2d ? '2d' : '3d'), onRead: () => enterSite(capability.prefer2d && capability.webgl ? '3d' : '2d') });
 
-  /** @type {ReturnType<typeof createWorld>|null} */
-  let world = null;
-  /** @type {ReturnType<typeof createScrollDriver>|null} */
-  let scroller = null;
-  /** @type {ReturnType<typeof createOverlay>|null} */
-  let overlay = null;
-  /** @type {ReturnType<typeof createDocument2d>|null} */
-  let doc2d = null;
-
-  /** '3d' | '2d'. The only place view mode is stored. */
-  let mode = '3d';
-  /** Where the camera was when we last left 3D, so the toggle is reversible. */
-  let parkedProgress = 0;
-  let parkedSection = 0;
-
-  /* Build the world behind the entry gate. The gate must paint first, so
-   * defer past the first frames rather than blocking on the build. */
-  function buildWorld() {
-    if (!capability.webgl) {
-      // No WebGL: there is nothing to warm, so the gate is ready at once.
-      entry.setReady();
-      return;
-    }
-    try {
-      world = createWorld(document.getElementById('webgl'));
-      world.warm();
-      if (DEBUG) console.info('[world] warmed', world.stats());
-    } catch (err) {
-      console.warn('[world] build failed, falling back to 2D', err);
-      world = null;
-      capability.webgl = false;
-      capability.prefer2d = true;
-    }
-    entry.setReady();
+  if (capability.prefer2d) {
+    document.getElementById('enter-label').textContent = content.meta.readLabel;
+    document.getElementById('read-button').textContent = 'Explore in 3D →';
+    document.getElementById('read-button').hidden = !capability.webgl;
   }
 
-  const defer = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 60));
-  requestAnimationFrame(() => requestAnimationFrame(() => defer(buildWorld)));
+  async function buildWorld() {
+    if (!capability.webgl) return null;
+    if (worldPromise) return worldPromise;
+    worldPromise = (async () => {
+      try {
+        const [{ createWorld }, scrollModule] = await Promise.all([import('./world/scene.js'), import('./world/scroll.js')]);
+        createScrollDriver = scrollModule.createScrollDriver;
+        world = createWorld(document.getElementById('webgl'));
+        world.warm();
+        if (DEBUG) startDebugReadout(world);
+        return world;
+      } catch (error) {
+        console.warn('3D unavailable; the reading view is ready.', error);
+        capability.webgl = false;
+        capability.prefer2d = true;
+        world?.dispose();
+        world = null;
+        if (overlay) overlay.element.querySelector('.icon--3d').disabled = true;
+        return null;
+      } finally { entry.setReady(); }
+    })();
+    return worldPromise;
+  }
+  // Readers never have to download or construct the scene before opening the site.
+  entry.setReady();
+  if (!capability.prefer2d && !location.hash && new URLSearchParams(location.search).get('view') !== '2d') {
+    requestAnimationFrame(() => requestAnimationFrame(() => buildWorld()));
+  }
 
-  /* ---------------- overlay + 2D document ---------------- */
-
+  function rememberSection(i) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#${content.sections[i].id}`);
+  }
+  function navigate(i) {
+    sound.play('sfx-nav');
+    if (mode === '3d' && scroller) {
+      introTween?.kill(); world.setIntro(1); scroller.enable();
+      scroller.animateTo(progressForSection(i));
+    }
+    else doc2d.scrollToSection(i);
+    overlay.setSection(i);
+    rememberSection(i);
+  }
   function buildChrome() {
     doc2d = createDocument2d();
     doc2d.hide();
-
-    overlay = createOverlay({
-      mode,
-      sound: !sound.muted,
-      onNavigate: (i) => {
-        sound.play('sfx-nav');
-        if (mode === '3d' && scroller) scroller.animateTo(progressForSection(i));
-        else doc2d.scrollToSection(i);
-        overlay.setSection(i);
-      },
-      onViewChange: (next) => setMode(next),
-      onSoundChange: (on) => {
-        sound.setMuted(!on);
-        overlay.setSound(on);
-        sound.play('sfx-toggle');
-      },
-      onZoomChange: (direction) => {
-        if (!world) return;
-        overlay.setZoom(world.stepZoom(direction));
-      },
+    overlay = createOverlay({ mode, sound: !sound.muted, onNavigate: navigate,
+      onHome: () => { if (mode === '3d') scroller?.animateTo(0); else window.scrollTo({ top: 0, behavior: capability.reducedMotion ? 'auto' : 'smooth' }); },
+      onViewChange: next => setMode(next),
+      onSoundChange: on => { sound.setMuted(!on); overlay.setSound(on); if (on) sound.init().then(() => sound.play('sfx-toggle')); },
+      onZoomChange: direction => { if (world) overlay.setZoom(world.stepZoom(direction)); },
     });
-
+    overlay.element.querySelector('.icon--3d').disabled = !capability.webgl;
     if (world) overlay.setZoom(world.zoomState());
-
-    // Without WebGL there is no 3D to go back to; say so rather than
-    // offering a button that would do nothing.
-    if (!capability.webgl) {
-      const btn = overlay.element.querySelector('.icon--3d');
-      btn.disabled = true;
-      btn.setAttribute('aria-disabled', 'true');
-    }
-
-    // In 2D the page scroll belongs to the document, so the nav highlight
-    // has to follow it rather than the camera.
-    window.addEventListener(
-      'scroll',
-      () => {
-        if (mode === '2d' && doc2d && overlay) overlay.setSection(doc2d.currentSection());
-      },
-      { passive: true }
-    );
+    window.addEventListener('scroll', () => { if (mode === '2d') overlay.setSection(doc2d.currentSection()); }, { passive: true });
   }
-
-  /* ---------------- view mode ---------------- */
-
-  /**
-   * Switch between the world and the document.
-   *
-   * Position is preserved in both directions: leaving 3D remembers the exact
-   * progress value, and coming back restores it if you are still on the same
-   * section, or jumps to the section you scrolled to if you moved.
-   */
-  function setMode(next, { silent = false, toTop = false } = {}) {
-    if (next === mode) return;
-    if (next === '3d' && !capability.webgl) return;
-
-    if (!silent) sound.play('sfx-toggle');
-
-    if (next === '2d') {
-      parkedProgress = scroller ? scroller.progress : parkedProgress;
-      parkedSection = sectionAtProgress(parkedProgress);
-
-      mode = '2d';
-      document.body.classList.remove('mode-3d');
-      document.body.classList.add('mode-2d');
-      scroller?.disable();
-      world?.stop();
-      doc2d.show();
-      if (toTop) {
-        // First landing in 2D (no WebGL): start at the masthead, not
-        // halfway down at section 01.
-        window.scrollTo(0, 0);
-        overlay?.setSection(0);
-      } else {
-        // 'auto', not 'smooth': this is a restore, not a journey.
-        doc2d.scrollToSection(parkedSection, 'auto');
-        overlay?.setSection(parkedSection);
-      }
-    } else {
-      const readingAt = doc2d.currentSection();
-
-      mode = '3d';
-      document.body.classList.remove('mode-2d');
-      document.body.classList.add('mode-3d');
-      doc2d.hide();
-      world?.setIntro(1);
-      world?.start();
-      ensureScroller();
-      scroller?.enable();
-      scroller?.refresh();
-      const target =
-        readingAt === parkedSection ? parkedProgress : progressForSection(readingAt);
-      scroller?.jumpTo(target);
-      world?.setProgress(target);
-      overlay?.setSection(sectionAtProgress(target));
-    }
-
-    overlay?.setMode(mode);
-  }
-
-  /* ---------------- Enter ---------------- */
-
-  /**
-   * Create the scroll driver. Deferred until the first time 3D is actually
-   * shown, because a visitor who starts in (or switches to) the reading view
-   * must not have ScrollTrigger competing for the page scroll.
-   */
   function ensureScroller() {
     if (scroller || !world) return;
-    scroller = createScrollDriver({
-      spacer,
-      onProgress: (p) => {
-        world.setProgress(p);
-        if (mode === '3d') overlay?.setSection(sectionAtProgress(p));
-      },
-    });
-    scroller.refresh();
+    scroller = createScrollDriver({ spacer, onProgress: p => {
+      world.setProgress(p);
+      if (mode === '3d') overlay?.setSection(sectionAtProgress(p));
+    }});
   }
-
-  function enterSite() {
-    entry.dismiss();
-    document.body.classList.remove('is-locked');
-
-    buildChrome();
-
-    // Audio is created here and only here: a context made before a gesture
-    // is refused or suspended by every current browser.
-    sound.init().then((ok) => {
-      if (ok) sound.play('sfx-enter');
-      if (DEBUG) console.info('[audio]', sound.stats());
-    });
-
-    if (capability.prefer2d) {
-      /* Narrow screen, reduced motion, or no WebGL: open the reading view.
-       * The world, if there is one, stays built and stopped behind it, so
-       * the View toggle is instant rather than a second load. */
-      setMode('2d', { silent: true, toTop: true });
-      if (DEBUG && world) startDebugReadout(world);
+  async function setMode(next, { toTop = false, intro = false } = {}) {
+    const request = ++modeRequest;
+    introTween?.kill();
+    if (next === mode && doc2d && ((next === '2d' && !doc2d.element.hidden) || (next === '3d' && world))) {
+      if (next === '3d') { world.setIntro(1); scroller?.enable(); }
       return;
     }
-
-    world.setIntro(0);
-    world.start();
-
-    const tl = { k: 0 };
-    gsap.to(tl, {
-      k: 1,
-      duration: capability.reducedMotion ? 0 : camCfg.INTRO_DURATION,
-      ease: camCfg.INTRO_EASE,
-      onUpdate: () => world.setIntro(tl.k),
-      onComplete: () => {
-        world.setIntro(1);
-        ensureScroller();
-        if (DEBUG) startDebugReadout(world);
-      },
-    });
+    if (next === '3d') {
+      document.body.classList.add('is-loading-3d');
+      await buildWorld();
+      document.body.classList.remove('is-loading-3d');
+      if (request !== modeRequest) return;
+      if (!world) next = '2d';
+    }
+    if (next === '2d') {
+      if (mode === '3d') {
+        parkedProgress = scroller?.progress ?? 0;
+        parkedSection = sectionAtProgress(parkedProgress);
+      }
+      mode = '2d';
+      scroller?.disable(); world?.stop();
+      document.body.classList.replace('mode-3d', 'mode-2d');
+      doc2d.show();
+      if (toTop) window.scrollTo(0, 0);
+      else doc2d.scrollToSection(parkedSection, 'auto');
+      overlay.setSection(toTop ? 0 : parkedSection);
+    } else {
+      const readingAt = doc2d.currentSection();
+      mode = '3d';
+      document.body.classList.replace('mode-2d', 'mode-3d');
+      doc2d.hide();
+      world.setIntro(1); world.start();
+      ensureScroller(); scroller.enable(); scroller.refresh();
+      const target = intro ? 0 : readingAt === parkedSection ? parkedProgress : progressForSection(readingAt);
+      scroller.jumpTo(target);
+      overlay.setZoom(world.zoomState());
+      if (intro && !capability.reducedMotion) {
+        scroller.disable();
+        const clock = { k: 0 };
+        world.setIntro(0);
+        introTween = gsap.to(clock, { k: 1, duration: camCfg.INTRO_DURATION, ease: camCfg.INTRO_EASE,
+          onUpdate: () => world.setIntro(clock.k), onComplete: () => { world.setIntro(1); scroller.enable(); } });
+      }
+    }
+    overlay.setMode(mode);
   }
-
-  // Exposed for the next milestones and for tools/verify.mjs.
-  window.__site = {
-    get world() {
-      return world;
-    },
-    get scroller() {
-      return scroller;
-    },
-    get overlay() {
-      return overlay;
-    },
-    get doc() {
-      return doc2d;
-    },
-    get mode() {
-      return mode;
-    },
-    audio: sound,
-    setMode,
-    capability,
-    /* Where the sections sit on the route. Exposed so tools/verify.mjs can
-     * drive the camera to them without keeping its own copy of the anchors,
-     * which would go stale the moment the route is re-laid out. */
-    anchors: worldCfg.SECTION_ANCHORS,
-  };
+  async function enterSite(initialMode = '2d') {
+    if (entered) return;
+    entered = true;
+    entry.dismiss();
+    document.body.classList.remove('is-locked');
+    buildChrome();
+    if (!sound.muted) sound.init().then(() => sound.play('sfx-enter'));
+    // Show readable content while the optional scene finishes loading.
+    await setMode('2d', { toTop: true });
+    if (initialMode === '3d') await setMode('3d', { intro: true });
+    else {
+      const i = content.sections.findIndex(s => s.id === location.hash.slice(1));
+      if (i >= 0) { doc2d.scrollToSection(i, 'auto'); overlay.setSection(i); }
+      doc2d.element.focus({ preventScroll: true });
+    }
+  }
+  window.addEventListener('beforeprint', () => { if (!doc2d) doc2d = createDocument2d(); });
+  document.getElementById('skip-content').addEventListener('click', async () => {
+    if (!entered) await enterSite('2d'); else await setMode('2d');
+    doc2d.element.focus({ preventScroll: true });
+  });
+  window.addEventListener('hashchange', async () => {
+    const i = content.sections.findIndex(s => s.id === location.hash.slice(1));
+    if (i < 0) return;
+    if (!entered) await enterSite('2d');
+    navigate(i);
+  });
+  document.getElementById('webgl').addEventListener('webglcontextlost', event => {
+    event.preventDefault(); capability.webgl = false;
+    if (entered) { setMode('2d'); overlay.element.querySelector('.icon--3d').disabled = true; }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) world?.stop(); else if (entered && mode === '3d') world?.start();
+  });
+  window.__site = { get world() { return world; }, get scroller() { return scroller; },
+    get overlay() { return overlay; }, get doc() { return doc2d; }, get mode() { return mode; },
+    audio: sound, setMode, capability, anchors: worldCfg.SECTION_ANCHORS };
+  if (location.hash || new URLSearchParams(location.search).get('view') === '2d') enterSite('2d');
 }
-
-/* ------------------------------------------------------------------ */
-/* Debug readout (?debug) — draw calls and fps                          */
-/* ------------------------------------------------------------------ */
 
 function startDebugReadout(world) {
   const el = document.createElement('div');

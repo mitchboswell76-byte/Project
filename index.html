@@ -4,15 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Mitch Boswell</title>
-    <meta name="description" content="Personal site — an isometric voxel world you travel through by scrolling." />
-    <link rel="icon" href="data:," />
+    <meta name="description" content="Mitch Boswell — Politics and American Studies at Nottingham. Research interests in public policy, social mobility and AI governance." />
+    <meta name="theme-color" content="#07070a" />
+    <meta property="og:title" content="Mitch Boswell — Politics, people and what comes next" />
+    <meta property="og:description" content="Research, experience and open questions. A portfolio in two perspectives." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   </head>
   <body>
+    <button id="skip-content" class="skip-link" type="button">Skip to the reading view</button>
     <!-- ============================================================
          ENTRY GATE — painted before the world exists
          ============================================================ -->
     <div id="entry" class="entry">
+      <h1 class="visually-hidden">Mitch Boswell — Portfolio</h1>
       <canvas id="entry-canvas" aria-hidden="true"></canvas>
+      <div class="entry__top"><span>M<span class="accent">.</span>B / 2026</span><span>Independent thinking.<br>Open questions.</span></div>
+      <div class="entry__edition">A PORTFOLIO IN TWO PERSPECTIVES <span>01 / EXPLORE &nbsp; 02 / READ</span></div>
 
       <div class="entry__corner entry__corner--bl">
         <p id="entry-name-lines" class="entry__name"></p>
@@ -25,6 +33,7 @@
           <span id="enter-label">Enter</span>
           <span class="enter__arrow" aria-hidden="true">&rarr;</span>
         </button>
+        <button id="read-button" class="entry__read" type="button">Read the portfolio ↗</button>
         <p id="sound-notice" class="entry__notice"></p>
       </div>
     </div>
@@ -50,6 +59,7 @@
     <!-- Screen-reader announcements for section changes -->
     <p id="live-region" class="visually-hidden" role="status" aria-live="polite"></p>
 
+    <noscript><main class="noscript"><h1>Mitch Boswell</h1><p>Politics and American Studies student at the University of Nottingham, interested in public policy, social mobility and AI governance.</p><p>Enable JavaScript to explore the portfolio, or <a href="https://github.com/mitchboswell76-byte">find me on GitHub</a>.</p></main><style>.entry{display:none}</style></noscript>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

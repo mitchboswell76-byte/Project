@@ -1,141 +1,91 @@
-/**
- * content.js — ALL of the site's text lives here and nowhere else.
- *
- * Everything in [SQUARE BRACKETS] is placeholder copy at roughly the right
- * length. Search for "[" to find every spot that still needs your words.
- * You can edit any string in this file without touching application logic.
- *
- * To add or remove a section, add or remove an entry in `sections` AND add
- * or remove a matching anchor in `world.SECTION_ANCHORS` in config.js.
- */
-
+/** Public portfolio copy. Only add credentials, links and work you can verify. */
 export const content = {
   meta: {
     siteName: 'Mitch Boswell',
     nameLines: ['Mitch', 'Boswell', 'Portfolio'],
     logoText: 'MB',
     since: '2026',
-    tagline: '[ONE SHORT LINE ABOUT WHAT YOU DO]',
-    soundNotice: 'Sound plays on this site.',
-    enterLabel: 'Enter',
+    tagline: 'Politics. People. What comes next.',
+    description: 'Politics and American Studies student at the University of Nottingham, interested in public policy, social mobility and AI governance.',
+    soundNotice: 'Sound is optional. Start exploring in silence.',
+    enterLabel: 'Explore in 3D',
+    readLabel: 'Read the portfolio',
+    discipline: 'Politics & American Studies',
+    status: 'Looking ahead to 2027',
   },
-
-  /* ------------------------------------------------------------------ */
-  /* UI CHROME — the persistent overlay and 2D document.                  */
-  /* Every visible word of interface text is here too, so the whole site  */
-  /* can be re-worded (or translated) without opening a module.           */
-  /* ------------------------------------------------------------------ */
   ui: {
-    navLabel: 'Sections',           // aria-label on the <nav>
-    viewLabel: 'View :',
-    soundLabel: 'Sound :',
-    zoomLabel: 'Zoom :',
-    zoomOut: '\u2013', // en dash, reads better than a hyphen at this size
-    zoomIn: '+',
-    on: 'On',
-    off: 'Off',
-    separator: '/',
-
-    /* Accessible names for the controls. Kept separate from the visible
-     * labels above because a screen reader needs the whole sentence. */
+    navLabel: 'Portfolio sections', viewLabel: 'View', soundLabel: 'Sound', zoomLabel: 'Zoom',
+    zoomOut: '−', zoomIn: '+', on: 'On', off: 'Off', separator: '/',
     a11y: {
-      logo: 'Home',
-      navItem: (label) => `Go to ${label}`,
-      view3d: 'Switch to the 3D world',
-      view2d: 'Switch to the reading view',
-      soundOn: 'Turn sound on',
-      soundOff: 'Turn sound off',
-      zoomOut: 'Zoom out',
-      zoomIn: 'Zoom in',
-      skipToContent: 'Skip to content',
-      sectionAnnounce: (label) => `${label} section`,
+      logo: 'Return to the introduction', navItem: label => `Go to ${label}`,
+      view3d: 'Switch to the 3D view', view2d: 'Switch to the reading view',
+      soundOn: 'Turn sound on', soundOff: 'Turn sound off', zoomOut: 'Zoom out', zoomIn: 'Zoom in',
+      skipToContent: 'Skip to the reading view', sectionAnnounce: label => `${label} section`,
     },
-
-    /* 2D reading view. */
     doc: {
-      intro:
-        'The reading view. The same content as the 3D world, as a plain document you can select, search, print and read with a screen reader.',
-      contactHeading: 'Contact',
-      philosophyHeading: 'Principles',
-      backToTop: 'Back to top',
-      cvLabel: 'Curriculum vitae (PDF)',
+      intro: 'I study how political decisions shape everyday life — and how careful research can help us make better ones.',
+      contactHeading: 'Keep in touch', philosophyHeading: 'How I approach a question',
+      backToTop: 'Back to top ↑', cvLabel: 'Download CV (PDF)',
     },
   },
-
   sections: [
     {
-      id: 'profile',
-      number: '01',
-      navLabel: 'Profile',
-      markerLabel: 'PROFILE',
-      voxelHeading: '[HEADING ONE]',
-      subLabel: '[SUB-LABEL ONE]',
+      id: 'profile', number: '01', navLabel: 'Profile', markerLabel: 'PROFILE',
+      voxelHeading: 'People & power', subLabel: 'University of Nottingham · Class of 2027',
+      summary: 'Understanding the decisions that shape everyday life.',
       body: [
-        '[PARAGRAPH 1 — about forty words of your own copy goes here. Introduce who you are and what you are working towards, in plain sentences. This placeholder is deliberately the length of a real paragraph so the ground text plane is sized correctly.]',
-        '[PARAGRAPH 2 — a second paragraph of similar length. Use it for the detail that supports the first: what you study, what you are good at, and what you want to do next. Replace all of this text.]',
+        'I’m a final-year Politics and American Studies student at the University of Nottingham. My interests sit where politics meets everyday life: work, opportunity, public institutions and the distribution of power.',
+        'I enjoy taking a broad question, testing competing explanations and turning what I find into a clear argument. I’m working towards a career in policy, research or public affairs, with a particular interest in technology governance.',
       ],
-      district: 'plaza',
+      tags: ['Political analysis', 'Research', 'Clear communication'], district: 'plaza',
     },
     {
-      id: 'projects',
-      number: '02',
-      navLabel: 'Projects',
-      markerLabel: 'PROJECTS',
-      voxelHeading: '[HEADING TWO]',
-      subLabel: '[SUB-LABEL TWO]',
+      id: 'research', number: '02', navLabel: 'Research', markerLabel: 'RESEARCH',
+      voxelHeading: 'Open questions', subLabel: 'Class · Ideas · Political change',
+      summary: 'Questions about opportunity, political change and the American experience.',
       body: [
-        '[PARAGRAPH 1 — describe the work itself. What you built or researched, what your role was, and what came out of it. Concrete detail reads better here than adjectives, and this placeholder matches the length of a paragraph that works.]',
-        '[PARAGRAPH 2 — a second project, or the outcome of the first. If you have numbers, use them. Replace all of this text with your own copy.]',
+        'My research interests centre on the American middle and working classes. I’m interested in how unions, public policy and regional politics shape social mobility — and why economic interests do not always translate into the political choices we might expect.',
+        'For my dissertation, I’m exploring how Cold War competition may have influenced post-war US political economy. It is a developing question: the task is to establish what the evidence can support, and where other explanations carry more weight.',
       ],
-      district: 'harbour',
+      cards: [
+        { label: 'Dissertation direction', title: 'Competition abroad. Reform at home?', text: 'How far did competition with the Soviet Union influence US domestic economic policy? A research direction in development, with the period and causal mechanism still to be narrowed.' },
+        { label: 'Research interest', title: 'Class and conservatism', text: 'How do identity, region and economic change shape working-class support for conservative politics?' },
+        { label: 'Research interest', title: 'Opportunity and institutions', text: 'What can the history of organised labour tell us about the conditions that support social mobility?' },
+      ], district: 'harbour',
     },
     {
-      id: 'writing',
-      number: '03',
-      navLabel: 'Writing',
-      markerLabel: 'WRITING',
-      voxelHeading: '[HEADING THREE]',
-      subLabel: '[SUB-LABEL THREE]',
+      id: 'experience', number: '03', navLabel: 'Experience', markerLabel: 'EXPERIENCE',
+      voxelHeading: 'Ideas into practice', subLabel: 'Learning · Explaining · Building',
+      summary: 'From AI governance discussions to one-to-one teaching.',
       body: [
-        '[PARAGRAPH 1 — what you write about and why. Name the subjects, the arguments you are interested in, and anything published or assessed. This placeholder runs to about the length of a paragraph that sits well on the ground plane.]',
-        '[PARAGRAPH 2 — a second paragraph, perhaps on method or the questions you keep returning to. Replace all of this text with your own copy.]',
+        'In 2026 I completed the Nottingham AI Safety Initiative’s Introduction to AI Safety Fellowship, following the Frontier AI Governance stream. It gave me a setting to examine technology policy questions, assess arguments and discuss approaches to governing advanced AI.',
+        'Alongside my studies, I have worked as a private tutor: planning lessons, explaining unfamiliar ideas and adapting to individual learners. This portfolio is another ongoing project — an experiment in making a personal website feel spatial, playful and easy to read.',
       ],
-      district: 'gardens',
+      cards: [
+        { label: 'February–May 2026', title: 'AI governance fellowship', text: 'Nottingham AI Safety Initiative · Frontier AI Governance stream. Research, discussion and analysis of technology policy.' },
+        { label: 'Self-employed', title: 'Private tutoring', text: 'One-to-one tuition, lesson planning and progress feedback. Practice in making an explanation work for the person in front of me.' },
+        { label: 'Digital project', title: 'A portfolio in voxels', text: 'A scrolling 3D portfolio with a reading view, keyboard controls and a quiet, optional soundtrack.', link: { label: 'View the project on GitHub ↗', url: 'https://github.com/mitchboswell76-byte/Project' } },
+      ], district: 'gardens',
     },
     {
-      id: 'about',
-      number: '04',
-      navLabel: 'About',
-      markerLabel: 'ABOUT',
-      voxelHeading: '[HEADING FOUR]',
-      subLabel: '[SUB-LABEL FOUR]',
+      id: 'connect', number: '04', navLabel: 'Next', markerLabel: 'NEXT',
+      voxelHeading: 'What comes next', subLabel: 'Policy · Research · Public affairs',
+      summary: 'Looking for work where good questions lead to useful decisions.',
       body: [
-        '[PARAGRAPH 1 — the closing note. Where you are, what you are looking for, and how someone should get in touch. Keep it short and specific. This placeholder is about the length of a paragraph that reads well at the end of the route.]',
-        '[PARAGRAPH 2 — optional second paragraph, or delete this line entirely and the layout will close up on its own.]',
-      ],
-      district: 'snowfield',
+        'I’m looking towards graduate opportunities for 2027 in public policy, research, public affairs and AI governance. I’m drawn to work that calls for careful judgement, clear writing and an interest in how institutions affect people.',
+        'You can find my digital work on GitHub. This site will grow alongside my research and experience; for now, it is a snapshot of the questions I’m asking and the direction I’m taking.',
+      ], district: 'snowfield',
     },
   ],
-
-  /* Optional numbered-principle block. Rendered as flat ground text at the
-   * end of the route, and as a numbered list in 2D mode.
-   * Set to an empty array [] to remove it entirely. */
   philosophyItems: [
-    { n: '1', text: '[PRINCIPLE ONE — a single line you actually believe about your work.]' },
-    { n: '2', text: '[PRINCIPLE TWO — another single line, similar length to the first.]' },
-    { n: '3', text: '[PRINCIPLE THREE — a third line. Add or remove entries freely.]' },
+    { n: '1', text: 'Start with a question that can be answered.' },
+    { n: '2', text: 'Take competing explanations seriously.' },
+    { n: '3', text: 'Make the argument clear, including its limits.' },
   ],
-
   contact: {
-    email: '[YOU@EXAMPLE.COM]',
-    links: [
-      { label: '[LinkedIn]', url: '[https://www.linkedin.com/in/your-handle]' },
-      { label: '[GitHub]', url: '[https://github.com/your-handle]' },
-    ],
-    /* Put a PDF at public/cv.pdf and set this to "/cv.pdf", or leave null
-     * and the CV link will not be rendered at all. */
+    email: null,
+    links: [{ label: 'Find me on GitHub ↗', url: 'https://github.com/mitchboswell76-byte' }],
     cvUrl: null,
   },
 };
-
 export default content;

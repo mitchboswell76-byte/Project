@@ -17,10 +17,12 @@ import { makeDotTile } from './dotGrid.js';
 
 const GREY = hex(palette.voxelGrey);
 
-export function createEntryScreen({ onEnter }) {
+export function createEntryScreen({ onEnter, onRead }) {
   const root = document.getElementById('entry');
   const canvas = document.getElementById('entry-canvas');
   const ctx = canvas.getContext('2d');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.getElementById('read-button').addEventListener('click', onRead);
   const enterBtn = document.getElementById('enter-button');
 
   /* ---------- static DOM text, all from content.js ---------- */
@@ -89,6 +91,7 @@ export function createEntryScreen({ onEnter }) {
 
     dotPattern = ctx.createPattern(makeDotTile(28, 2, hex(palette.grid)), 'repeat');
     if (squares.length === 0) seedSquares(w, h);
+    if (reduced) requestAnimationFrame(frame);
   }
 
   /* ---------- flicker ---------- */
@@ -170,10 +173,11 @@ export function createEntryScreen({ onEnter }) {
     drawWordmark();
     drawSquares(true, dt);
 
-    raf = requestAnimationFrame(frame);
+    if (!reduced) raf = requestAnimationFrame(frame);
   }
 
-  const flickerId = setInterval(flicker, flickerInterval);
+  const flickerId = reduced ? null : setInterval(flicker, flickerInterval);
+  if (reduced) flicker();
 
   window.addEventListener('resize', resize);
   resize();

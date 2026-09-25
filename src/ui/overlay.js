@@ -96,6 +96,7 @@ const ICON_DOC = `
  */
 export function createOverlay({
   onNavigate,
+  onHome,
   onViewChange,
   onSoundChange,
   onZoomChange,
@@ -110,9 +111,9 @@ export function createOverlay({
     <div class="overlay__scrim" aria-hidden="true"></div>
 
     <div class="overlay__inner">
-      <div class="overlay__mark">
+      <button type="button" class="overlay__mark" aria-label="Return to the introduction">
         <canvas class="overlay__logo" role="img" aria-label="${ui.a11y.logo}"></canvas>
-      </div>
+      </button>
 
       <p class="overlay__name">${content.meta.nameLines
         .map((line) => `<span>${line}</span>`)
@@ -123,7 +124,7 @@ export function createOverlay({
           ${content.sections
             .map(
               (s, i) => `<li><button type="button" class="navlink" data-index="${i}"
-                 aria-label="${ui.a11y.navItem(s.navLabel)}">${s.navLabel}</button></li>`
+                 aria-label="${ui.a11y.navItem(s.navLabel)}"><span class="navlink__number" aria-hidden="true">${s.number}</span>${s.navLabel}</button></li>`
             )
             .join('')}
         </ul>
@@ -140,7 +141,7 @@ export function createOverlay({
         </div>
       </div>
 
-      <div class="overlay__row">
+      <div class="overlay__row overlay__row--zoom">
         <span class="overlay__label" id="zoom-label">${ui.zoomLabel}</span>
         <div class="overlay__zoom" role="group" aria-labelledby="zoom-label">
           <button type="button" class="zoombtn" data-step="1"
@@ -161,8 +162,16 @@ export function createOverlay({
                   aria-label="${ui.a11y.soundOff}">${ui.off}</button>
         </div>
       </div>
-    </div>`;
+    </div>
+    <aside class="scene-card" aria-label="Current section">
+      <p class="scene-card__eyebrow"><span class="scene-card__number">01 / 04</span><span>SCROLL TO EXPLORE ↓</span></p>
+      <h1 class="scene-card__title"></h1>
+      <p class="scene-card__summary"></p>
+      <div class="scene-card__actions"><button type="button" class="scene-card__read" aria-label="Read this section">Read this section ↗</button><button type="button" class="scene-card__next" aria-label="Next section">→</button></div>
+      <div class="scene-card__track" aria-hidden="true"><span></span></div>
+    </aside>`;
 
+  root.querySelector('.overlay__mark').addEventListener('click', () => onHome?.());
   const logo = root.querySelector('.overlay__logo');
   const mark = root.querySelector('.overlay__mark');
   const { w, h } = drawLogoMark(logo);
@@ -190,6 +199,8 @@ export function createOverlay({
   /* ---------------- state ---------------- */
 
   let current = -1;
+  root.querySelector('.scene-card__read').addEventListener('click', () => onViewChange('2d'));
+  root.querySelector('.scene-card__next').addEventListener('click', () => onNavigate((current + 1) % content.sections.length));
 
   const api = {
     element: root,
@@ -204,6 +215,12 @@ export function createOverlay({
         if (on) b.setAttribute('aria-current', 'true');
         else b.removeAttribute('aria-current');
       });
+      const section = content.sections[i];
+      root.querySelector('.scene-card__number').textContent = `${section.number} / 04`;
+      root.querySelector('.scene-card__title').textContent = section.voxelHeading;
+      root.querySelector('.scene-card__summary').textContent = section.summary;
+      root.querySelector('.scene-card__track span').style.width = `${(i + 1) / content.sections.length * 100}%`;
+      root.querySelector('.scene-card__next').setAttribute('aria-label', `Next section: ${content.sections[(i + 1) % content.sections.length].navLabel}`);
       const label = content.sections[i]?.navLabel;
       if (live && label) live.textContent = ui.a11y.sectionAnnounce(label);
     },

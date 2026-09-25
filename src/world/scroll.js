@@ -42,6 +42,12 @@ export function createScrollDriver({ spacer, onProgress }) {
   /* Set while we are moving the scroll position ourselves, so our own
    * programmatic scrolls do not re-enter the handler as user input. */
   let selfScrolling = false;
+  let navigationTween = null;
+  const cancelNavigation = () => { navigationTween?.kill(); navigationTween = null; };
+  window.addEventListener('wheel', cancelNavigation, { passive: true });
+  window.addEventListener('touchstart', cancelNavigation, { passive: true });
+  const onKey = event => { if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) cancelNavigation(); };
+  window.addEventListener('keydown', onKey);
 
   const bufferPx = () => (window.innerHeight * cfg.LOOP_BUFFER_VH) / 100;
   const lapPx = () => (window.innerHeight * lapVh()) / 100;
@@ -96,19 +102,22 @@ export function createScrollDriver({ spacer, onProgress }) {
    * buffer would be wrapped mid-flight and land in the wrong place.
    */
   function animateTo(progress, duration = cfg.NAV_JUMP_DURATION) {
+    cancelNavigation();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { jumpTo(progress); return; }
     const from = state.progress;
     let delta = wrap(progress) - from;
     if (delta > 0.5) delta -= 1;
     if (delta < -0.5) delta += 1;
 
     const tween = { p: from };
-    gsap.killTweensOf(tween);
-    return gsap.to(tween, {
+    navigationTween = gsap.to(tween, {
       p: from + delta,
       duration,
       ease: cfg.NAV_JUMP_EASE,
       onUpdate: () => jumpTo(tween.p),
+      onComplete: () => { navigationTween = null; },
     });
+    return navigationTween;
   }
 
   /**
@@ -144,9 +153,14 @@ export function createScrollDriver({ spacer, onProgress }) {
       setScroll(pixelsFor(state.progress));
     },
     disable: () => {
+      cancelNavigation();
       state.enabled = false;
     },
     destroy: () => {
+      cancelNavigation();
+      window.removeEventListener('wheel', cancelNavigation);
+      window.removeEventListener('touchstart', cancelNavigation);
+      window.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     },

@@ -39,7 +39,8 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SHOTS = resolve(HERE, 'shots');
-const URL = process.env.SITE ?? 'http://localhost:4173/?debug';
+const localServer = process.env.SITE ? null : await (await import('./preview-server.mjs')).startPreview();
+const URL = process.env.SITE ?? `${localServer.url}?debug`;
 const PW = process.env.PW ?? 'playwright';
 
 const { chromium } = await import(PW).catch(() => {
@@ -133,7 +134,7 @@ await page.click('#enter-button');
 await page
   .waitForFunction(() => Boolean(window.__site?.scroller), { timeout: 20000 })
   .catch(() => {});
-await page.waitForTimeout(400);
+await page.waitForTimeout(4200);
 await page.screenshot({ path: `${SHOTS}/02-after-enter.png` });
 
 const hasWorld = await page.evaluate(() => Boolean(window.__site?.world));
@@ -152,20 +153,19 @@ const [PLAZA, HARBOUR, GARDENS, SNOWFIELD] = ANCHORS;
  * buffer at each end, so scroll position and progress are no longer the same
  * fraction of each other.
  */
-const at = (p) =>
-  page.evaluate((q) => {
-    window.__site.scroller.jumpTo(q);
-    return new Promise((r) =>
-      setTimeout(() => {
-        const c = window.__site.world.camera;
-        r({
-          pos: c.position.toArray().map((v) => +v.toFixed(4)),
-          quat: c.quaternion.toArray().map((v) => +v.toFixed(4)),
-          stats: window.__site.world.stats(),
-        });
-      }, 500)
-    );
-  }, p);
+const at = async (p) => {
+  await page.bringToFront();
+  await page.evaluate(q => window.__site.scroller.jumpTo(q), p);
+  await page.waitForFunction(() => Math.abs(window.__site.world.getRenderedProgress() - window.__site.scroller.progress) < 1e-8, { timeout: 20000 });
+  return page.evaluate(() => {
+    const c = window.__site.world.camera;
+    return {
+      pos: c.position.toArray().map(v => +v.toFixed(4)),
+      quat: c.quaternion.toArray().map(v => +v.toFixed(4)),
+      stats: window.__site.world.stats(),
+    };
+  });
+};
 
 // Approach 0.50 from below, then from above, and compare.
 await at(0.1);
@@ -737,8 +737,11 @@ await page.evaluate(() => document.getElementById('verify-bright-sheet')?.remove
 /* M6 — audio                                                           */
 /* ==================================================================== */
 
+check(await page.evaluate(() => window.__site.audio.muted), 'sound is off until requested');
+await page.click('.soundbtn[data-on="true"]');
+await page.waitForFunction(() => window.__site.audio.playing);
 const a0 = await page.evaluate(() => window.__site.audio.stats());
-check(a0.playing, 'the theme loop is running after Enter', `context ${a0.state}`);
+check(a0.playing, 'the theme loop runs after sound is enabled', `context ${a0.state}`);
 
 await at(0.2);
 await at(0.75);
@@ -812,7 +815,7 @@ check(docState.webglHidden, 'the WebGL canvas is out of the way in 2D mode');
 
 const levels = docState.headings.map((h) => h.level);
 check(
-  levels[0] === 1 && levels.slice(1).every((l) => l === 2),
+  levels[0] === 1 && levels.slice(1).every((l, i) => l >= 2 && l <= levels[i] + 1),
   'headings are semantic and in order',
   `h-levels ${levels.join(',')}`
 );
@@ -867,9 +870,9 @@ const contrast = await page.evaluate(() => {
 check(contrast >= 4.5, 'body text meets WCAG AA contrast', `${contrast}:1`);
 
 const dotGrid = await page.evaluate(() =>
-  getComputedStyle(document.getElementById('doc')).backgroundImage.startsWith('url(')
+  getComputedStyle(document.getElementById('doc')).backgroundImage === 'none'
 );
-check(dotGrid, 'the same dot grid is behind 2D mode');
+check(dotGrid, 'reading view has a clean background');
 
 /* Back to 3D, and back to where we were. */
 await page.click('.icon--3d');
@@ -957,6 +960,7 @@ await intro.click('#enter-button');
 await intro
   .waitForFunction(() => Boolean(window.__site?.scroller), { timeout: 20000 })
   .catch(() => {});
+await intro.waitForTimeout(4200);
 
 const flight = await intro.evaluate(() => {
   const w = window.__site.world;
@@ -1139,7 +1143,8 @@ async function landsIn2d(label, pageOptions) {
 
   // The toggle is still offered, so take it and check the world really runs.
   await p.click('.icon--3d');
-  await p.waitForTimeout(1500);
+  await p.waitForFunction(() => window.__site?.mode === '3d' && window.__site?.scroller);
+  await p.waitForTimeout(500);
   const after = await p.evaluate(() => ({
     mode: window.__site.mode,
     scroller: Boolean(window.__site.scroller),
@@ -1197,12 +1202,19 @@ check(
 
 /* Sweep the whole route rather than trusting the anchors: the peak is
  * usually between two districts, where both are still mounted. */
+await page.bringToFront();
 let peakCalls = { calls: 0 };
 let peakTris = { triangles: 0 };
 for (let q = 0; q <= 1.0001; q += 0.05) {
   const s = await page.evaluate((v) => {
     window.__site.scroller.jumpTo(v);
-    return new Promise((r) => setTimeout(() => r(window.__site.world.stats()), 280));
+    return new Promise(resolve => {
+      const tick = () => {
+        if (Math.abs(window.__site.world.getRenderedProgress() - window.__site.scroller.progress) < 1e-8) resolve(window.__site.world.stats());
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
   }, q);
   if (s.calls > peakCalls.calls) peakCalls = { ...s, q: +q.toFixed(2) };
   if (s.triangles > peakTris.triangles) peakTris = { ...s, q: +q.toFixed(2) };
@@ -1241,6 +1253,7 @@ for (const q of [0, ...ANCHORS, 0.9]) {
 }
 
 await browser.close();
+await localServer?.close();
 
 console.log(`\nScreenshots written to ${SHOTS}`);
 if (fail.length) {
