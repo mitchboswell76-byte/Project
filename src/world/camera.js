@@ -280,7 +280,13 @@ export function makeIntroDriver(cam, monument = null) {
 
     /* FOV widens only for the pass itself and comes back — so the opening
      * and closing shots are both at the honest resting field of view. */
-    const flare = Math.sin(Math.PI * THREE.MathUtils.clamp((t - 0.18) / 0.62, 0, 1));
+    /* Math.sin(Math.PI) is 1.22e-16, not 0, so letting the sine run to its
+     * endpoints leaves the camera resting at 30.000000000000007 degrees
+     * rather than the declared FOV. Harmless on screen, but it means the
+     * final state depends on which frame the tween happens to stop on.
+     * Zeroing the ends explicitly makes the resting shot deterministic. */
+    const flareT = THREE.MathUtils.clamp((t - 0.18) / 0.62, 0, 1);
+    const flare = flareT <= 0 || flareT >= 1 ? 0 : Math.sin(Math.PI * flareT);
     cam.fov = cfg.FOV + (cfg.INTRO_PEAK_FOV - cfg.FOV) * flare;
 
     cam.up.set(0, 1, 0);

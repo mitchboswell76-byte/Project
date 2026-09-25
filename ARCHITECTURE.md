@@ -57,6 +57,25 @@ cancels any navigation tween before restoring the document scroll position.
 8. Per-chunk disposal must not destroy shared geometry or materials. Global teardown
    releases the shared registry.
 9. Relative build and audio paths work under a project subdirectory.
+10. The introduction must finish at exactly `camera.FOV`. Its flare curve is
+    zeroed at both endpoints by hand, because `Math.sin(Math.PI)` is 1.22e-16
+    rather than 0 and would otherwise leave the resting shot at
+    30.000000000000007 degrees, dependent on which frame the tween stopped on.
+
+## Writing browser checks
+
+Three failure modes have each cost a debugging round. Avoid them:
+
+- **Do not sample a fixed slice of one instanced mesh.** Chunk remounts change
+  instance order, and only some instances in a batch carry an animation.
+  Compare every animated mesh's whole matrix array.
+- **Do not wait a fixed number of milliseconds for a camera move.** A
+  navigation jump that wraps through the loop boundary takes far longer than
+  `NAV_JUMP_DURATION`. Wait for arrival at the target; the timeout is the
+  failure. Waiting for "stopped moving" instead races the tween's own start
+  and passes before it begins.
+- **Do not hard-code a constant the site owns, or compare floats exactly.**
+  Read it back through `window.__site` and compare with a tolerance.
 
 ## Verification
 

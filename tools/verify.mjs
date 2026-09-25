@@ -497,19 +497,50 @@ check(
   `${afterRoundTrip.geometries} geometries live`
 );
 
-/* Props are gently animated: the animated batch must actually move. */
+/* Props are gently animated: every animated batch must actually move.
+ *
+ * Compare the WHOLE matrix array of EVERY animated mesh, and wait for real
+ * rendered frames rather than wall-clock time. Sampling a fixed slice of one
+ * arbitrarily-ordered mesh over a fixed delay is flaky here: instance order
+ * changes when a chunk remounts, only some instances in a batch carry an
+ * `anim`, and under SwiftShader 600ms can be as few as two frames. */
 const moved = await page.evaluate(
   () =>
     new Promise((resolve) => {
-      const mesh = window.__site.world.scene.children.find(
+      const meshes = window.__site.world.scene.children.filter(
         (o) => o.isInstancedMesh && o.name.endsWith('-animated')
       );
-      if (!mesh) return resolve(false);
-      const first = mesh.instanceMatrix.array.slice(0, 64).join(',');
-      setTimeout(() => resolve(mesh.instanceMatrix.array.slice(0, 64).join(',') !== first), 600);
+      if (meshes.length === 0) return resolve({ found: 0, still: [] });
+
+      const before = meshes.map((m) => Array.from(m.instanceMatrix.array));
+      let frames = 0;
+      const started = performance.now();
+
+      const tick = () => {
+        frames++;
+        // Enough frames for a slow bob to travel, and a wall-clock floor in
+        // case rAF is being throttled.
+        if (frames < 10 || performance.now() - started < 500) {
+          requestAnimationFrame(tick);
+          return;
+        }
+        const still = meshes
+          .filter((m, i) => Array.from(m.instanceMatrix.array).join(',') === before[i].join(','))
+          .map((m) => m.name);
+        resolve({ found: meshes.length, still, frames });
+      };
+      requestAnimationFrame(tick);
     })
 );
-check(moved, 'floating cubes and water bob rather than sitting still');
+check(
+  moved.found > 0 && moved.still.length === 0,
+  'floating cubes and water bob rather than sitting still',
+  moved.found === 0
+    ? 'no animated batch in the scene'
+    : `${moved.found} animated batches moved over ${moved.frames} frames${
+        moved.still.length ? `; still: ${moved.still.join(', ')}` : ''
+      }`
+);
 
 /* The whole world at once, which is the worst case for draw calls. */
 const heaviest = await page.evaluate(
@@ -679,7 +710,16 @@ check(focusRing, 'focused controls get a visible outline');
 await at(PLAZA);
 const navBefore = await page.evaluate(() => window.__site.scroller.progress);
 await page.click('.navlink[data-index="3"]');
-await page.waitForTimeout(2200);
+/* Wait for ARRIVAL rather than for a fixed delay. A jump that wraps through
+ * the loop boundary takes noticeably longer than NAV_JUMP_DURATION, so a
+ * fixed wait samples mid-flight; and waiting for "stopped moving" races the
+ * tween's own start. If the camera never arrives this times out, which is
+ * exactly the failure this check exists to catch. */
+await page
+  .waitForFunction((t) => Math.abs(window.__site.scroller.progress - t) < 0.005, SNOWFIELD, {
+    timeout: 15000,
+  })
+  .catch(() => {});
 const navAfter = await page.evaluate(() => ({
   progress: window.__site.scroller.progress,
   current: Number(document.querySelector('.navlink[aria-current="true"]')?.dataset.index ?? -1),
@@ -1101,8 +1141,11 @@ const handover = await intro.evaluate(() => ({
   progress: window.__site.scroller?.progress ?? null,
   fov: window.__site.world.camera.fov,
 }));
+/* Read the resting FOV from the running site rather than hard-coding it:
+ * retuning camera.FOV in config.js must not break this suite. */
+const restingFov = await intro.evaluate(() => window.__site.restingFov);
 check(
-  handover.progress === 0 && handover.fov === 30,
+  handover.progress === 0 && Math.abs(handover.fov - restingFov) < 1e-9,
   'the transition hands over to the scroll driver cleanly',
   `progress ${handover.progress}, fov ${handover.fov}`
 );

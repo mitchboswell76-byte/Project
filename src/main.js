@@ -198,7 +198,8 @@ function boot() {
   });
   window.__site = { get world() { return world; }, get scroller() { return scroller; },
     get overlay() { return overlay; }, get doc() { return doc2d; }, get mode() { return mode; },
-    audio: sound, setMode, capability, anchors: worldCfg.SECTION_ANCHORS };
+    audio: sound, setMode, capability, anchors: worldCfg.SECTION_ANCHORS,
+    restingFov: camCfg.FOV };
   if (location.hash || new URLSearchParams(location.search).get('view') === '2d') enterSite('2d');
 }
 
