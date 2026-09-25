@@ -30,6 +30,39 @@ jobs:
         with:
           path: dist
 
+  # The headless smoke test in tools/verify.mjs: the Enter transition, the
+  # no-jump scroll requirement, chunk streaming, the overlay, 2D mode with
+  # WebGL off, audio, scenery and framing. It runs against the real build but
+  # does NOT gate the deploy — a browser download failing upstream should not
+  # stop a site going out. Read its output when a change looks wrong.
+  verify:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # One step: a background server started in another step is not
+      # something a workflow should rely on outliving it.
+      - name: Build, serve and verify
+        run: |
+          npm run build
+          npx vite preview --port 4173 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4173/ >/dev/null && break
+            sleep 1
+          done
+          npm run verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-screenshots
+          path: tools/shots/
+          if-no-files-found: ignore
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

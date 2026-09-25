@@ -14,14 +14,21 @@ import { content } from '../content.js';
 import { entry as cfg, hex, palette } from '../config.js';
 import { rasteriseBlock, toCoords } from '../world/bitmapFont.js';
 import { makeDotTile } from './dotGrid.js';
+import { onResize } from '../util/dom.js';
 
 const GREY = hex(palette.voxelGrey);
 
-export function createEntryScreen({ onEnter }) {
+/**
+ * @param {object} o
+ * @param {() => void} o.onEnter  the visitor wants the 3D world
+ * @param {() => void} o.onRead   the visitor would rather have the document
+ */
+export function createEntryScreen({ onEnter, onRead }) {
   const root = document.getElementById('entry');
   const canvas = document.getElementById('entry-canvas');
   const ctx = canvas.getContext('2d');
   const enterBtn = document.getElementById('enter-button');
+  const readBtn = document.getElementById('read-instead');
 
   /* ---------- static DOM text, all from content.js ---------- */
   document.getElementById('entry-name-lines').innerHTML = content.meta.nameLines
@@ -31,6 +38,7 @@ export function createEntryScreen({ onEnter }) {
   document.getElementById('entry-tagline').textContent = content.meta.tagline;
   document.getElementById('sound-notice').textContent = content.meta.soundNotice;
   document.getElementById('enter-label').textContent = content.meta.enterLabel;
+  readBtn.textContent = content.meta.readInsteadLabel;
 
   /* ---------- wordmark pixel grid ---------- */
   const grid = rasteriseBlock(content.meta.nameLines, {
@@ -175,7 +183,7 @@ export function createEntryScreen({ onEnter }) {
 
   const flickerId = setInterval(flicker, flickerInterval);
 
-  window.addEventListener('resize', resize);
+  const stopResize = onResize(resize);
   resize();
   raf = requestAnimationFrame(frame);
 
@@ -188,24 +196,43 @@ export function createEntryScreen({ onEnter }) {
     onEnter();
   });
 
-  return {
+  /* The reading view needs nothing built, so it is available immediately —
+   * including while the world is still warming. */
+  readBtn.addEventListener('click', () => onRead());
+
+  /* A watchdog, not a schedule: if building the world takes longer than
+   * entry.READY_TIMEOUT_MS the gate opens anyway rather than leaving a
+   * disabled button and no explanation. Whatever has been built by then is
+   * what the visitor gets. */
+  const watchdog = setTimeout(() => api.setReady(), cfg.READY_TIMEOUT_MS);
+
+  const api = {
     /** Called once the world has finished building in the background. */
     setReady() {
+      if (ready) return;
       ready = true;
+      clearTimeout(watchdog);
       enterBtn.disabled = false;
       enterBtn.classList.add('is-ready');
       root.classList.add('is-ready');
+      /* Move the keyboard focus onto the only thing worth doing here. Guarded
+       * because focus during the first frames of a page load is disruptive to
+       * a screen reader that is still reading the gate out. */
+      if (document.activeElement === document.body) enterBtn.focus();
     },
     /** Fade the gate out and stop its render loop. */
     dismiss() {
+      clearTimeout(watchdog);
       root.classList.add('is-leaving');
       setTimeout(() => {
         running = false;
         cancelAnimationFrame(raf);
         clearInterval(flickerId);
-        window.removeEventListener('resize', resize);
+        stopResize();
         root.hidden = true;
       }, 900);
     },
   };
+
+  return api;
 }

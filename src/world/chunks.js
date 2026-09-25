@@ -36,18 +36,16 @@ export function createChunkManager(scene, sections) {
     })),
   ].filter((z) => z.anchor !== undefined);
 
-  function mount(index) {
-    if (live.has(index)) return;
-    const zone = zones.find((z) => z.key === index);
-    if (!zone) return;
+  function mount(zone) {
+    if (live.has(zone.key)) return;
 
     const chunk = zone.build();
     for (const obj of chunk.objects) scene.add(obj);
-    live.set(index, chunk);
+    live.set(zone.key, chunk);
   }
 
-  function unmount(index) {
-    const chunk = live.get(index);
+  function unmount(key) {
+    const chunk = live.get(key);
     if (!chunk) return;
     for (const obj of chunk.objects) {
       scene.remove(obj);
@@ -55,14 +53,13 @@ export function createChunkManager(scene, sections) {
       // releases only what that object owns.
       obj.userData?.dispose?.();
     }
-    live.delete(index);
+    live.delete(key);
   }
 
   /** Called every frame with the current normalised progress. */
   function update(progress, dt) {
     for (const zone of zones) {
       const { anchor } = zone;
-      const i = zone.key;
       /* A district's content runs forward from its anchor, so the window is
        * asymmetric: reach further ahead than behind. Both edges are measured
        * the short way round the loop, or the district either side of the
@@ -72,8 +69,8 @@ export function createChunkManager(scene, sections) {
       const inRange =
         (ahead <= cfg.CHUNK_RADIUS * 1.6 || behind <= cfg.CHUNK_RADIUS) &&
         loopDistance(progress, anchor) <= cfg.CHUNK_RADIUS * 1.6;
-      if (inRange) mount(i);
-      else unmount(i);
+      if (inRange) mount(zone);
+      else unmount(zone.key);
     }
 
     for (const chunk of live.values()) {
@@ -83,11 +80,11 @@ export function createChunkManager(scene, sections) {
 
   /** Build everything at once — used to warm the world before Enter. */
   function mountAll() {
-    for (const zone of zones) mount(zone.key);
+    for (const zone of zones) mount(zone);
   }
 
   function disposeAll() {
-    for (const index of [...live.keys()]) unmount(index);
+    for (const key of [...live.keys()]) unmount(key);
   }
 
   return { update, mountAll, disposeAll, get liveCount() { return live.size; } };

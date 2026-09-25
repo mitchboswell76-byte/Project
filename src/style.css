@@ -224,8 +224,21 @@ body.mode-2d .scroll-spacer {
   display: none;
 }
 
-body.mode-3d .doc {
-  display: none;
+/* In 3D the document is NOT removed. It is clipped offstage, so the site's
+   whole text stays in the accessibility tree and in find-in-page rather than
+   disappearing for anyone who has not found the View control. Its links are
+   taken out of the tab order in JS — see setOffstage in document2d.js. */
+.doc--offstage {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  pointer-events: none;
 }
 
 /* Dot grid behind 2D mode, applied via JS-generated data URI. */
@@ -663,4 +676,160 @@ body.mode-2d .overlay__scrim {
     background: none;
     color: #000;
   }
+}
+
+
+/* ==========================================================================
+   SKIP LINK, GATE ESCAPE, PROGRESS AND HINT
+   ========================================================================== */
+
+/* Off screen until focused, then the first thing on it. */
+.skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  padding: 10px 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--bg);
+  background: var(--ink);
+  text-decoration: none;
+  transform: translateY(-120%);
+}
+
+.skip-link:focus-visible,
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* The way past the gate for anyone who would rather read than travel. Quiet:
+   Enter is the offer, this is the alternative. */
+.entry__read {
+  display: block;
+  margin: 12px 0 0;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.entry__read:hover {
+  color: var(--ink);
+}
+
+/* Where you are on the route. One bar, one marker, no numbers: it answers
+   "how far through am I" and nothing else. */
+.overlay__progress {
+  position: relative;
+  width: 92px;
+  height: 3px;
+  margin: 0 0 22px;
+  pointer-events: none;
+}
+
+.overlay__progress-track {
+  position: absolute;
+  inset: 1px 0;
+  background: var(--grid);
+}
+
+.overlay__progress-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 3px;
+  background: var(--ink);
+  will-change: transform;
+}
+
+body.mode-2d .overlay__progress {
+  opacity: 0.45;
+}
+
+.overlay__row--keys {
+  margin-top: 18px;
+  /* Never in the way of the control above it: this row is a caption, not a
+     control, and the overlay's rows sit close together. */
+  pointer-events: none;
+}
+
+.overlay__keys {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+/* The keys only do anything in the world. */
+body.mode-2d .overlay__row--keys,
+body.is-narrow .overlay__row--keys {
+  display: none;
+}
+
+/* Shown once after the Enter transition: nothing else says that the page
+   scroll is what moves the camera. */
+.scroll-hint {
+  position: fixed;
+  right: var(--gutter);
+  bottom: calc(var(--gutter) + 4px);
+  z-index: 80;
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  pointer-events: none;
+}
+
+.scroll-hint.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   DOCUMENT: THE ITEMS UNDER A SECTION
+   ========================================================================== */
+
+.doc__items {
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc__item {
+  padding: 14px 0;
+  border-top: 1px solid var(--grid);
+}
+
+.doc__item-title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.doc__item-meta {
+  margin: 4px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.doc__item-text {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-muted);
 }

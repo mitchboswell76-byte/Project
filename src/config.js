@@ -65,33 +65,42 @@ export const camera = {
 
   PITCH_DEG: 38, // downward tilt. 35–45 is the reference look.
 
-  /* YAW_DEG rotates the camera about the vertical axis.
+  /* YAW_DEG rotates the camera about the vertical axis, and with it the
+   * direction the journey appears to travel across the screen.
    *
-   * Values above 90 put the camera on the -Z side of the route, which makes
-   * the route recede towards the UPPER LEFT — so its near end sits lower
-   * right and the road reads as descending across the screen. That is the
-   * reference composition. The effective isometric rotation is (180 - YAW),
-   * so 145 here is a 35 degree turn, inside the usual 30–45 range.
+   * The route runs along +X, so with a pitch of PITCH_DEG the travel
+   * direction lands at atan(cos(YAW) / (sin(YAW) * sin(PITCH))) away from
+   * straight-up-the-screen:
    *
-   * Values below 90 put the camera on the +Z side and mirror the whole
-   * composition: the route then ascends left to right. Try 32 for that.
+   *   YAW  90  road recedes straight up the frame, world flows straight down
+   *   YAW  68  road recedes to the UPPER RIGHT, world flows down and left
+   *   YAW 145  road recedes to the UPPER LEFT, world flows down and right
    *
-   * If you change which side of 90 this sits on, also flip the signs of
-   * BEAM_SIDE and CONTENT_SIDE below, or the beam and the body copy will
-   * swap places.
+   * 68 is the reference composition: the movement reads as top-to-bottom,
+   * the same gesture as the scroll that drives it, while the road still
+   * crosses the frame at enough of an angle to keep the three-quarter voxel
+   * read. It also puts the road in the upper RIGHT, away from the overlay in
+   * the top-left corner, which a yaw above 90 runs the road straight through.
+   *
+   * The camera then sits on the +Z side of the route, so BEAM_SIDE (-Z) is
+   * the FAR side and CONTENT_SIDE (+Z) the near one — the beam reads as
+   * background behind the copy, as in the reference. Both still land on the
+   * same screen sides they always did (beam left, copy right), because which
+   * side of the screen an offset falls on is the sign of sin(YAW), and that
+   * is positive either side of 90.
    */
-  YAW_DEG: 145,
+  YAW_DEG: 68,
 
   /* Hold the yaw relative to the ROAD rather than to the world axes.
    *
-   * OFF for the current route, which runs broadly one way: a world-fixed rig
-   * is the reference look, and it keeps the world sliding past at a constant
-   * angle through the bends instead of the diorama rotating under you.
-   *
-   * Turn it ON if the route is ever made to double back on itself — a
-   * world-fixed rig then ends up ahead of its own direction of travel and the
-   * shot flips through 180 degrees. */
-  FOLLOW_PATH_HEADING: false,
+   * ON. The rig keeps a constant angle to the road, so the route recedes in
+   * the same screen direction on every straight and the world always flows
+   * the same way down the frame — through the bends as well as along the
+   * straights. With it off the composition is only correct where the road
+   * happens to run along +X, and each bend swings the flow direction by the
+   * angle of the bend, which is exactly what a scroll-driven journey must
+   * not do. */
+  FOLLOW_PATH_HEADING: true,
 
   DISTANCE: 92, // how far back along that pitch/yaw the camera sits.
   // At FOV 30 this sees roughly 88 x 49 world units of ground.
@@ -124,6 +133,23 @@ export const camera = {
    * back — the first and last shots are both at the honest FOV above. */
   INTRO_PEAK_FOV: 76,
   INTRO_EASE: 'power2.inOut', // GSAP ease driving the transition's clock
+};
+
+/* ------------------------------------------------------------------ */
+/* PERFORMANCE                                                         */
+/* ------------------------------------------------------------------ */
+/* The renderer starts at MAX_PIXEL_RATIO and drops to LOW_PIXEL_RATIO if the
+ * first few seconds of the journey do not hold MIN_FPS. That is the whole
+ * adaptive strategy: one step, measured once, never oscillating between two
+ * resolutions. A phone at device pixel ratio 3 is shading nine times the
+ * pixels of a laptop at 1, which is where mid-range hardware loses the frame
+ * budget — not in the scene, which is a dozen draw calls. */
+
+export const perf = {
+  MAX_PIXEL_RATIO: 2, // cap on window.devicePixelRatio at full resolution
+  LOW_PIXEL_RATIO: 1.25, // what a struggling device is dropped to
+  SAMPLE_SECONDS: 3, // how long to measure before deciding
+  MIN_FPS: 45, // below this average, drop the resolution
 };
 
 /* ------------------------------------------------------------------ */
@@ -212,9 +238,14 @@ export const world = {
   RISER_LENGTH: 34,
   RISER_WIDTH: 6.2,
 
-  /* Where a district's flat content sits, relative to the route. Negative
-   * puts it on the far side from the beam, so the beam reads as foreground. */
-  CONTENT_SIDE: 13,
+  /* Where a district's flat content sits, relative to the route, on the
+   * opposite side from BEAM_SIDE so the two never overlap.
+   *
+   * Kept tight to the road. The route recedes towards the upper right (see
+   * YAW_DEG), so anything placed further ahead also drifts right across the
+   * frame: at 13 the body copy — which starts 78 units past the heading —
+   * ran off the right edge. */
+  CONTENT_SIDE: 7,
 
   /* How flat ground text is oriented.
    *   'screen' — still lying flat on the ground, but always turned so it
@@ -424,6 +455,16 @@ export const entry = {
   DRIFT_MIN_PX: 5,
   DRIFT_MAX_PX: 16,
   DRIFT_SPEED: 10, // pixels per second, roughly
+
+  /* How long to wait for the world to finish building before letting the
+   * visitor in anyway. A slow machine must not be held at a dead button with
+   * nothing to click: past this, Enter opens the site regardless, and the
+   * world either arrives a moment later or the reading view takes over. */
+  READY_TIMEOUT_MS: 9000,
+
+  /* How long the "scroll to travel" hint stays on screen after the Enter
+   * transition hands over, in milliseconds. */
+  HINT_MS: 4200,
 };
 
 /* ------------------------------------------------------------------ */
@@ -449,7 +490,7 @@ export const overlay = {
    * the default font size; past that, every extra pixel is scene it hides for
    * no reason. */
   SCRIM_WIDTH_PX: 260,
-  SCRIM_HEIGHT_PX: 480,
+  SCRIM_HEIGHT_PX: 560, // tall enough to carry the column down to the keys row
   SCRIM_ALPHA: 0.94, // opacity at the corner, where the controls are
 
   /* On a narrow screen the overlay stops having a column of its own and the

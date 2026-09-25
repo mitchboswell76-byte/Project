@@ -24,6 +24,7 @@
 import gsap from 'gsap';
 import { scroll as cfg } from '../config.js';
 import { totalLength, wrap } from './path.js';
+import { onResize } from '../util/dom.js';
 
 /** One lap of the circuit, in viewport heights. */
 export function lapVh() {
@@ -78,13 +79,12 @@ export function createScrollDriver({ spacer, onProgress }) {
   }
 
   const onScroll = () => read();
-  const onResize = () => {
-    // vh-based sizes just changed underneath us; hold the camera still.
-    if (state.enabled) setScroll(pixelsFor(state.progress));
-  };
-
   window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onResize);
+
+  // vh-based sizes change underneath us on a resize; hold the camera still.
+  const stopResize = onResize(() => {
+    if (state.enabled) setScroll(pixelsFor(state.progress));
+  });
 
   /**
    * Animate to a progress value, going THE SHORT WAY round the loop — from
@@ -148,7 +148,7 @@ export function createScrollDriver({ spacer, onProgress }) {
     },
     destroy: () => {
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
+      stopResize();
     },
   };
 }

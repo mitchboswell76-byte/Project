@@ -3,11 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Mitch Boswell</title>
-    <meta name="description" content="Personal site — an isometric voxel world you travel through by scrolling." />
+    <!-- Title, description, social-card and structured-data tags are injected
+         at build time from src/content.js by the seo() plugin in
+         vite.config.js, so there is one source for the site's words. -->
+    <!--seo-->
     <link rel="icon" href="data:," />
   </head>
   <body>
+    <!-- The first thing in the tab order: a way past the gate and the world
+         straight to the text. Visible only when focused (see style.css). -->
+    <a id="skip-link" class="skip-link" href="#doc"></a>
+
     <!-- ============================================================
          ENTRY GATE — painted before the world exists
          ============================================================ -->
@@ -25,6 +31,7 @@
           <span id="enter-label">Enter</span>
           <span class="enter__arrow" aria-hidden="true">&rarr;</span>
         </button>
+        <button id="read-instead" class="entry__read" type="button"></button>
         <p id="sound-notice" class="entry__notice"></p>
       </div>
     </div>
@@ -40,7 +47,10 @@
     <!-- ============================================================
          2D DOCUMENT MODE — populated in src/ui/document2d.js
          ============================================================ -->
-    <main id="doc" class="doc" hidden></main>
+    <!-- Server-rendered from content.js at build time and replaced by
+         document2d.js on load. It is here so that a crawler, a preview card
+         and a visitor with JavaScript off all get the actual text. -->
+    <main id="doc" class="doc" hidden><!--doc--></main>
 
     <!-- ============================================================
          PERSISTENT OVERLAY — populated in src/ui/overlay.js
@@ -49,6 +59,15 @@
 
     <!-- Screen-reader announcements for section changes -->
     <p id="live-region" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <noscript>
+      <style>
+        /* No JavaScript: no gate, no world, no overlay — just the document,
+           which is already in the HTML above. */
+        #entry, #webgl, #scroll-spacer, #overlay { display: none !important; }
+        #doc[hidden] { display: block !important; }
+      </style>
+    </noscript>
 
     <script type="module" src="/src/main.js"></script>
   </body>

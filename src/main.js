@@ -13,15 +13,21 @@
  * START in the reading view (capability.prefer2d). Only the no-WebGL case
  * loses the 3D control; the other two keep the toggle, so anyone who wants
  * the world can still have it.
+ *
+ * It also owns the URL. The address bar is the site's only shareable state:
+ * `#projects` is section 02 and `?view=doc` is the reading view, in either
+ * mode and whichever way the visitor got there. See the URL section below.
  */
 
 import './style.css';
 import gsap from 'gsap';
 
 import { content } from './content.js';
+import { session } from './util/dom.js';
 import {
   camera as camCfg,
   doc as docCfg,
+  entry as entryCfg,
   fallback,
   hex,
   overlay as overlayCfg,
@@ -92,6 +98,47 @@ export const capability = {
 capability.prefer2d = !capability.webgl || capability.narrow || capability.reducedMotion;
 
 /* ------------------------------------------------------------------ */
+/* URL state                                                           */
+/* ------------------------------------------------------------------ */
+/* The hash is the section and `?view=doc` is the reading view, so any point
+ * in the site can be linked to, the back button works, and a reload comes
+ * back to where you were. The hash matches the ids the 2D document already
+ * uses for its sections, so a link works with JavaScript switched off too —
+ * the browser simply scrolls to it.
+ *
+ * Section changes rewrite the URL with replaceState, not pushState: progress
+ * changes continuously as you scroll, and pushing a history entry per section
+ * would leave the back button unwinding the journey one district at a time.
+ * Deliberate acts — a nav click, a view switch — do push. */
+
+const VIEW_PARAM = 'view';
+const VIEW_KEY = 'mb:view';
+
+/** @returns {{section: number|null, view: '2d'|'3d'|null}} */
+function readUrl() {
+  const params = new URLSearchParams(location.search);
+  const viewParam = params.get(VIEW_PARAM);
+  const id = decodeURIComponent(location.hash.replace(/^#/, '')).replace(/^doc-/, '');
+  const index = content.sections.findIndex((s) => s.id === id);
+  return {
+    section: index >= 0 ? index : null,
+    view: viewParam === 'doc' ? '2d' : viewParam === 'world' ? '3d' : null,
+  };
+}
+
+function writeUrl({ section, view }, { push = false } = {}) {
+  const url = new URL(location.href);
+  if (view === '2d') url.searchParams.set(VIEW_PARAM, 'doc');
+  else url.searchParams.delete(VIEW_PARAM);
+  url.hash = section == null ? '' : `#${content.sections[section].id}`;
+
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  if (next === `${location.pathname}${location.search}${location.hash}`) return;
+  if (push) history.pushState(null, '', next);
+  else history.replaceState(null, '', next);
+}
+
+/* ------------------------------------------------------------------ */
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -108,7 +155,15 @@ function boot() {
   const spacer = document.getElementById('scroll-spacer');
   spacer.style.height = `${scrollHeightVh()}vh`;
 
-  const entry = createEntryScreen({ onEnter: enterSite });
+  /* What the URL asked for, read once. A link to a section is a deep link:
+   * it skips the Enter fly-through, which is an opening, not something to sit
+   * through on the way to the thing you were sent. */
+  const requested = readUrl();
+
+  const entry = createEntryScreen({
+    onEnter: () => enterSite(),
+    onRead: () => enterSite({ read: true }),
+  });
   const sound = createAudio();
 
   /** @type {ReturnType<typeof createWorld>|null} */
@@ -122,6 +177,10 @@ function boot() {
 
   /** '3d' | '2d'. The only place view mode is stored. */
   let mode = '3d';
+  /** The section the URL asked for, applied once the site is open. */
+  const pendingSection = requested.section;
+  /** The section the URL currently names, so it is only rewritten on change. */
+  let urlSection = requested.section ?? -1;
   /** Where the camera was when we last left 3D, so the toggle is reversible. */
   let parkedProgress = 0;
   let parkedSection = 0;
@@ -164,6 +223,8 @@ function boot() {
         if (mode === '3d' && scroller) scroller.animateTo(progressForSection(i));
         else doc2d.scrollToSection(i);
         overlay.setSection(i);
+        // A deliberate move, so it earns a history entry.
+        writeUrl({ section: i, view: mode }, { push: true });
       },
       onViewChange: (next) => setMode(next),
       onSoundChange: (on) => {
@@ -192,10 +253,30 @@ function boot() {
     window.addEventListener(
       'scroll',
       () => {
-        if (mode === '2d' && doc2d && overlay) overlay.setSection(doc2d.currentSection());
+        if (mode !== '2d' || !doc2d || !overlay) return;
+        const i = doc2d.currentSection();
+        overlay.setSection(i);
+        overlay.setProgress((i + 0.5) / content.sections.length);
+        if (i !== urlSection) {
+          urlSection = i;
+          writeUrl({ section: i, view: mode });
+        }
       },
       { passive: true }
     );
+
+    /* The skip link is the keyboard route past the gate and the world to the
+     * words. It points at #doc so it still works with no JavaScript; with
+     * JavaScript, switching to the reading view first is what makes it mean
+     * anything in 3D. */
+    const skip = document.getElementById('skip-link');
+    skip.textContent = content.ui.a11y.skipToContent;
+    skip.addEventListener('click', (e) => {
+      e.preventDefault();
+      setMode('2d');
+      doc2d.element.focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+    });
   }
 
   /* ---------------- view mode ---------------- */
@@ -207,7 +288,7 @@ function boot() {
    * progress value, and coming back restores it if you are still on the same
    * section, or jumps to the section you scrolled to if you moved.
    */
-  function setMode(next, { silent = false, toTop = false } = {}) {
+  function setMode(next, { silent = false, toTop = false, fromUrl = false } = {}) {
     if (next === mode) return;
     if (next === '3d' && !capability.webgl) return;
 
@@ -253,6 +334,111 @@ function boot() {
     }
 
     overlay?.setMode(mode);
+    session.set(VIEW_KEY, mode);
+    /* A view switch is deliberate, so it pushes — except when it IS the
+     * history, i.e. we are here because the visitor pressed Back. */
+    if (!fromUrl) {
+      writeUrl({ section: overlaySection(), view: mode }, { push: true });
+    }
+  }
+
+  /** Whichever section is current in whichever view is showing. */
+  function overlaySection() {
+    if (mode === '2d') return doc2d ? doc2d.currentSection() : parkedSection;
+    return sectionAtProgress(scroller ? scroller.progress : parkedProgress);
+  }
+
+  /**
+   * Go to a section in whichever view is showing. `animate` is ignored in 2D,
+   * where the document's own smooth scrolling does the work.
+   */
+  function goToSection(i, { animate = true } = {}) {
+    if (mode === '2d') {
+      doc2d?.scrollToSection(i, animate ? undefined : 'auto');
+    } else if (scroller) {
+      if (animate) scroller.animateTo(progressForSection(i));
+      else scroller.jumpTo(progressForSection(i));
+    }
+    overlay?.setSection(i);
+  }
+
+  /* ---------------- history ---------------- */
+  /* Back and forward move between the states the site pushed: nav jumps and
+   * view switches. Anything the URL does not name is left alone, so pressing
+   * Back from a scrolled position does not also throw away the view. */
+  window.addEventListener('popstate', () => {
+    const state = readUrl();
+    if (state.view && state.view !== mode) setMode(state.view, { fromUrl: true });
+    if (state.section != null) goToSection(state.section, { animate: false });
+  });
+
+  /* ---------------- keyboard ---------------- */
+  /**
+   * The shortcuts named in content.ui.keysHint, and nothing else.
+   *
+   * Arrow keys move a section at a time in the 3D world, where a section is
+   * the meaningful unit and the native 40-pixel scroll is not; in the reading
+   * view they are left alone, because there they are how you read. Everything
+   * else — space, Page Up/Down, Home, End — stays native in both.
+   */
+  function onKeyDown(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (document.body.classList.contains('is-locked')) return; // gate is up
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
+
+    const sections = content.sections.length;
+
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowUp': {
+        if (mode !== '3d') return;
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        // The route is a loop, so the section list is circular too.
+        const next = (overlaySection() + step + sections) % sections;
+        sound.play('sfx-nav');
+        goToSection(next);
+        writeUrl({ section: next, view: mode }, { push: true });
+        return;
+      }
+      case '+':
+      case '=':
+      case '-':
+      case '_': {
+        if (mode !== '3d' || !world) return;
+        e.preventDefault();
+        overlay?.setZoom(world.stepZoom(e.key === '+' || e.key === '=' ? -1 : 1));
+        return;
+      }
+      case 'Escape':
+        if (mode === '3d') setMode('2d');
+        else if (capability.webgl) setMode('3d');
+        return;
+      default:
+    }
+  }
+  window.addEventListener('keydown', onKeyDown);
+
+  /* ---------------- the hint ---------------- */
+  /* Shown once, after the transition hands over. Nothing else on screen says
+   * that the page scroll is what moves the camera. */
+  function showScrollHint() {
+    if (capability.reducedMotion) return;
+    const hint = document.createElement('p');
+    hint.className = 'scroll-hint';
+    hint.textContent = content.meta.scrollHint;
+    hint.setAttribute('aria-hidden', 'true'); // the gesture, not the content
+    document.body.appendChild(hint);
+    requestAnimationFrame(() => hint.classList.add('is-visible'));
+
+    const dismiss = () => {
+      hint.classList.remove('is-visible');
+      setTimeout(() => hint.remove(), 700);
+      window.removeEventListener('scroll', dismiss);
+    };
+    window.addEventListener('scroll', dismiss, { passive: true, once: true });
+    setTimeout(dismiss, entryCfg.HINT_MS);
   }
 
   /* ---------------- Enter ---------------- */
@@ -268,13 +454,33 @@ function boot() {
       spacer,
       onProgress: (p) => {
         world.setProgress(p);
-        if (mode === '3d') overlay?.setSection(sectionAtProgress(p));
+        if (mode !== '3d') return;
+        const i = sectionAtProgress(p);
+        overlay?.setSection(i);
+        overlay?.setProgress(p);
+        /* Rewritten only when the section changes, not on every frame: this
+         * runs on every scroll event, and history.replaceState is not free. */
+        if (i !== urlSection) {
+          urlSection = i;
+          writeUrl({ section: i, view: mode });
+        }
       },
     });
     scroller.refresh();
   }
 
-  function enterSite() {
+  /**
+   * Open the site.
+   *
+   * Which view it opens in is decided here, once, in this order: what the URL
+   * asked for, then what this visit last chose, then what the machine can
+   * comfortably show. A section in the URL is a deep link, so it skips the
+   * Enter transition — that is an opening for a first visit, not something to
+   * sit through on the way to the thing someone sent you.
+   *
+   * @param {{read?: boolean}} [options] `read` forces the reading view.
+   */
+  function enterSite({ read = false } = {}) {
     entry.dismiss();
     document.body.classList.remove('is-locked');
 
@@ -287,12 +493,36 @@ function boot() {
       if (DEBUG) console.info('[audio]', sound.stats());
     });
 
-    if (capability.prefer2d) {
-      /* Narrow screen, reduced motion, or no WebGL: open the reading view.
-       * The world, if there is one, stays built and stopped behind it, so
-       * the View toggle is instant rather than a second load. */
-      setMode('2d', { silent: true, toTop: true });
+    const remembered = session.get(VIEW_KEY);
+    const wants2d =
+      read ||
+      !capability.webgl ||
+      requested.view === '2d' ||
+      (requested.view !== '3d' && (remembered ? remembered === '2d' : capability.prefer2d));
+
+    if (wants2d) {
+      /* Narrow screen, reduced motion, no WebGL, a ?view=doc link, or simply
+       * what this visitor chose last time. The world, if there is one, stays
+       * built and stopped behind the document, so the View toggle is instant
+       * rather than a second load. */
+      setMode('2d', { silent: true, toTop: pendingSection == null, fromUrl: true });
+      if (pendingSection != null) {
+        goToSection(pendingSection, { animate: false });
+        overlay?.setSection(pendingSection);
+      }
       if (DEBUG && world) startDebugReadout(world);
+      return;
+    }
+
+    if (pendingSection != null) {
+      // Deep link: hand straight over to the scroll driver at that section.
+      world.setIntro(1);
+      world.start();
+      ensureScroller();
+      scroller.jumpTo(progressForSection(pendingSection));
+      overlay?.setSection(pendingSection);
+      showScrollHint();
+      if (DEBUG) startDebugReadout(world);
       return;
     }
 
@@ -308,10 +538,16 @@ function boot() {
       onComplete: () => {
         world.setIntro(1);
         ensureScroller();
+        showScrollHint();
         if (DEBUG) startDebugReadout(world);
       },
     });
   }
+
+  /* The container is thrown away on navigation anyway, but releasing the GPU
+   * resources explicitly keeps a back-forward-cached page from holding a
+   * WebGL context it is not drawing with. */
+  window.addEventListener('pagehide', () => world?.dispose(), { once: true });
 
   // Exposed for the next milestones and for tools/verify.mjs.
   window.__site = {

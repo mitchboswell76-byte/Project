@@ -10,6 +10,12 @@
  * say different things, and it does not import Three.js — 2D mode has to
  * work with WebGL switched off entirely.
  *
+ * In 3D mode it is not removed from the page but moved OFFSTAGE: clipped to
+ * a single pixel, out of the tab order, and still in the accessibility tree.
+ * `hidden` would take the site's entire text away from a screen reader and
+ * from find-in-page for anyone who has not found the View control — the world
+ * is a way of presenting the content, not a reason to withhold it.
+ *
  * The headings are drawn with the same 5x7 bitmap font as the wordmark and
  * the voxel headings, as an image inside the `<h2>`. The heading's real text
  * sits next to it in the accessibility tree, so the document outline is
@@ -68,6 +74,9 @@ export function createDocument2d() {
   const ui = content.ui.doc;
 
   root.innerHTML = '';
+  /* Focusable so the skip link has somewhere to land, but not in the tab
+   * order itself. */
+  root.tabIndex = -1;
   applyDotGridCss(root, cfg.DOT_SPACING_PX, cfg.DOT_SIZE_PX);
 
   const article = el('article', 'doc__article');
@@ -97,6 +106,31 @@ export function createDocument2d() {
 
     sec.appendChild(el('p', 'doc__sub', s.subLabel));
     s.body.forEach((para) => sec.appendChild(el('p', 'doc__body', para)));
+
+    /* The individual pieces of work behind the section, if there are any.
+     * They exist in the reading view only: the 3D world stays at the level of
+     * a heading and two paragraphs, which is as much as flat ground text can
+     * carry legibly. */
+    if (s.items?.length) {
+      const list = el('ul', 'doc__items');
+      s.items.forEach((item) => {
+        const li = el('li', 'doc__item');
+        const title = el('p', 'doc__item-title');
+        if (item.url) {
+          const a = el('a', null, item.title);
+          a.href = item.url;
+          a.rel = 'noopener noreferrer';
+          title.appendChild(a);
+        } else {
+          title.textContent = item.title;
+        }
+        li.appendChild(title);
+        if (item.meta) li.appendChild(el('p', 'doc__item-meta', item.meta));
+        if (item.text) li.appendChild(el('p', 'doc__item-text', item.text));
+        list.appendChild(li);
+      });
+      sec.appendChild(list);
+    }
 
     article.appendChild(sec);
     sectionEls.push(sec);
@@ -149,15 +183,31 @@ export function createDocument2d() {
   /* API                                                                 */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * Offstage is not hidden. The document keeps its place in the accessibility
+   * tree in 3D mode so the site's text can still be read and searched, but
+   * its links leave the tab order — an invisible focus ring stepping through
+   * a clipped document is worse than no focus stop at all.
+   */
+  function setOffstage(offstage) {
+    root.classList.toggle('doc--offstage', offstage);
+    root.querySelectorAll('a').forEach((a) => {
+      if (offstage) a.setAttribute('tabindex', '-1');
+      else a.removeAttribute('tabindex');
+    });
+  }
+
+  root.hidden = false;
+
   return {
     element: root,
 
     show() {
-      root.hidden = false;
+      setOffstage(false);
     },
 
     hide() {
-      root.hidden = true;
+      setOffstage(true);
     },
 
     /** Scroll so section `i` sits at the top of the viewport. */

@@ -23,6 +23,7 @@
 import { content } from '../content.js';
 import { hex, overlay as cfg, palette, pickAccentIndices } from '../config.js';
 import { rasteriseLine, toCoords } from '../world/bitmapFont.js';
+import { onResize } from '../util/dom.js';
 
 const GREY = hex(palette.voxelGrey);
 
@@ -129,6 +130,11 @@ export function createOverlay({
         </ul>
       </nav>
 
+      <div class="overlay__progress" role="img" aria-label="${ui.a11y.progress}">
+        <span class="overlay__progress-track" aria-hidden="true"></span>
+        <span class="overlay__progress-head" aria-hidden="true"></span>
+      </div>
+
       <div class="overlay__row">
         <span class="overlay__label" id="view-label">${ui.viewLabel}</span>
         <div class="overlay__icons" role="group" aria-labelledby="view-label">
@@ -161,6 +167,11 @@ export function createOverlay({
                   aria-label="${ui.a11y.soundOff}">${ui.off}</button>
         </div>
       </div>
+
+      <div class="overlay__row overlay__row--keys">
+        <span class="overlay__label">${ui.keysLabel}</span>
+        <span class="overlay__keys">${ui.keysHint}</span>
+      </div>
     </div>`;
 
   const logo = root.querySelector('.overlay__logo');
@@ -174,6 +185,7 @@ export function createOverlay({
   const iconButtons = [...root.querySelectorAll('.icon')];
   const soundButtons = [...root.querySelectorAll('.soundbtn')];
   const zoomButtons = [...root.querySelectorAll('.zoombtn')];
+  const progressHead = root.querySelector('.overlay__progress-head');
   const live = document.getElementById('live-region');
 
   navButtons.forEach((b) =>
@@ -190,6 +202,7 @@ export function createOverlay({
   /* ---------------- state ---------------- */
 
   let current = -1;
+  let shownProgress = -1;
 
   const api = {
     element: root,
@@ -206,6 +219,21 @@ export function createOverlay({
       });
       const label = content.sections[i]?.navLabel;
       if (live && label) live.textContent = ui.a11y.sectionAnnounce(label);
+    },
+
+    /**
+     * Move the marker that shows where on the route you are.
+     *
+     * Called on every scroll frame, so it writes nothing unless the marker
+     * would actually move a visible amount — a style write per frame is a
+     * layout invalidation per frame for a control that is 90px wide.
+     */
+    setProgress(p) {
+      if (!progressHead) return;
+      const next = ((p % 1) + 1) % 1;
+      if (Math.abs(next - shownProgress) < 0.002) return;
+      shownProgress = next;
+      progressHead.style.transform = `translateX(${(next * 100).toFixed(1)}%)`;
     },
 
     setMode(m) {
@@ -239,7 +267,9 @@ export function createOverlay({
   api.setMode(mode);
   api.setSound(sound);
 
-  window.addEventListener('resize', () => drawLogoMark(logo));
+  // Re-rasterised on resize because the device pixel ratio can change when a
+  // window moves between screens. Coalesced to one redraw per frame.
+  onResize(() => drawLogoMark(logo));
 
   return api;
 }

@@ -12,12 +12,24 @@
 export const content = {
   meta: {
     siteName: 'Mitch Boswell',
+    /* The address this site is served from, with a trailing slash. Used for
+     * the canonical link and the social-card tags, which have to be absolute
+     * URLs — a card with a relative image is a card with no image. Set it to
+     * '' to leave those tags out entirely (they would be wrong, not missing,
+     * if this were left pointing somewhere else). */
+    siteUrl: 'https://mitchboswell76-byte.github.io/project/',
     nameLines: ['Mitch', 'Boswell', 'Portfolio'],
     logoText: 'MB',
     since: '2026',
     tagline: '[ONE SHORT LINE ABOUT WHAT YOU DO]',
     soundNotice: 'Sound plays on this site.',
     enterLabel: 'Enter',
+    /* The way past the gate for anyone who would rather read than travel,
+     * and for anyone whose machine is taking too long to build the world. */
+    readInsteadLabel: 'Read it as a document instead',
+    /* Shown once, briefly, after the Enter transition hands over. Nothing on
+     * screen otherwise says that the page scroll is what moves the camera. */
+    scrollHint: 'Scroll to travel',
   },
 
   /* ------------------------------------------------------------------ */
@@ -30,6 +42,10 @@ export const content = {
     viewLabel: 'View :',
     soundLabel: 'Sound :',
     zoomLabel: 'Zoom :',
+    keysLabel: 'Keys :',
+    /* Shown under the controls, and the only place the shortcuts are
+     * documented. Keep it in step with the handler in main.js. */
+    keysHint: '\u2191\u2193 section \u00b7 +\u2013 zoom \u00b7 Esc read',
     zoomOut: '\u2013', // en dash, reads better than a hyphen at this size
     zoomIn: '+',
     on: 'On',
@@ -47,7 +63,8 @@ export const content = {
       soundOff: 'Turn sound off',
       zoomOut: 'Zoom out',
       zoomIn: 'Zoom in',
-      skipToContent: 'Skip to content',
+      skipToContent: 'Skip to the text of this site',
+      progress: 'Position on the route',
       sectionAnnounce: (label) => `${label} section`,
     },
 
@@ -62,6 +79,17 @@ export const content = {
     },
   },
 
+  /* Each section may also carry `items`: the individual pieces of work,
+   * writing or study behind it. They are rendered as a list in the reading
+   * view (and are what a reader actually scans for), and left out of the 3D
+   * world, which stays at the level of a heading and two paragraphs.
+   *
+   * Shape — every field except `title` is optional:
+   *   { title: 'Dissertation title',
+   *     meta:  'Final year \u00b7 2026',
+   *     url:   'https://example.com/the-thing',
+   *     text:  'One sentence on what it was and what came of it.' }
+   */
   sections: [
     {
       id: 'profile',
@@ -74,6 +102,7 @@ export const content = {
         '[PARAGRAPH 1 — about forty words of your own copy goes here. Introduce who you are and what you are working towards, in plain sentences. This placeholder is deliberately the length of a real paragraph so the ground text plane is sized correctly.]',
         '[PARAGRAPH 2 — a second paragraph of similar length. Use it for the detail that supports the first: what you study, what you are good at, and what you want to do next. Replace all of this text.]',
       ],
+      items: [],
       district: 'plaza',
     },
     {
@@ -87,6 +116,7 @@ export const content = {
         '[PARAGRAPH 1 — describe the work itself. What you built or researched, what your role was, and what came out of it. Concrete detail reads better here than adjectives, and this placeholder matches the length of a paragraph that works.]',
         '[PARAGRAPH 2 — a second project, or the outcome of the first. If you have numbers, use them. Replace all of this text with your own copy.]',
       ],
+      items: [],
       district: 'harbour',
     },
     {
@@ -100,6 +130,7 @@ export const content = {
         '[PARAGRAPH 1 — what you write about and why. Name the subjects, the arguments you are interested in, and anything published or assessed. This placeholder runs to about the length of a paragraph that sits well on the ground plane.]',
         '[PARAGRAPH 2 — a second paragraph, perhaps on method or the questions you keep returning to. Replace all of this text with your own copy.]',
       ],
+      items: [],
       district: 'gardens',
     },
     {
@@ -113,6 +144,7 @@ export const content = {
         '[PARAGRAPH 1 — the closing note. Where you are, what you are looking for, and how someone should get in touch. Keep it short and specific. This placeholder is about the length of a paragraph that reads well at the end of the route.]',
         '[PARAGRAPH 2 — optional second paragraph, or delete this line entirely and the layout will close up on its own.]',
       ],
+      items: [],
       district: 'snowfield',
     },
   ],

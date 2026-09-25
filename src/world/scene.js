@@ -11,16 +11,17 @@
  */
 
 import * as THREE from 'three';
-import { camera as camCfg, palette, world as cfg } from '../config.js';
+import { camera as camCfg, palette, perf as perfCfg, world as cfg } from '../config.js';
 import { content } from '../content.js';
 import { applyProgress, createCamera, makeIntroDriver, resize as resizeCamera } from './camera.js';
 import { createBeam } from './beam.js';
 import { createChunkManager } from './chunks.js';
 import { createGround } from './ground.js';
 import { createVoxelText } from './voxelText.js';
-import { offsetFromPath, pointAt } from './path.js';
+import { cameraYawAt, offsetFromPath, pointAt } from './path.js';
 import { setMaxAnisotropy } from './groundText.js';
 import { disposeAll as disposeSharedResources } from './resources.js';
+import { onResize } from '../util/dom.js';
 
 const DEG = Math.PI / 180;
 
@@ -31,7 +32,13 @@ export function createWorld(canvas) {
     antialias: true,
     powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  /* Resolution is adaptive: it starts at the cap and steps down once if the
+   * opening seconds do not hold perf.MIN_FPS. See measurePerformance below. */
+  let pixelRatioCap = perfCfg.MAX_PIXEL_RATIO;
+  const applyPixelRatio = () =>
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelRatioCap));
+
+  applyPixelRatio();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(palette.background, 1);
@@ -63,7 +70,9 @@ export function createWorld(canvas) {
   // the camera. The Enter transition flies between these blocks.
   const monument = createVoxelText(content.meta.nameLines, {
     position: offsetFromPath(0, 0, 32, 0),
-    rotationY: -camCfg.YAW_DEG * DEG,
+    // cameraYawAt, not the raw YAW_DEG: with FOLLOW_PATH_HEADING on, the
+    // rig's yaw at progress 0 is the one the monument has to face.
+    rotationY: -cameraYawAt(0),
     orientation: 'upright',
   });
   if (monument) {
@@ -113,10 +122,39 @@ export function createWorld(canvas) {
   let raf = 0;
   let last = performance.now();
 
+  /* ---------------- adaptive resolution ---------------- */
+  /* Measured over the first perf.SAMPLE_SECONDS of actual rendering, then
+   * decided once and never revisited: a threshold that could trip in both
+   * directions would sit on the boundary flipping resolution every few
+   * seconds, which is far more noticeable than the lower resolution is. */
+  let sampleFrames = 0;
+  let sampleStart = 0;
+  let sampleDone = false;
+
+  function measurePerformance(now) {
+    if (sampleDone) return;
+    if (!sampleStart) {
+      sampleStart = now;
+      return;
+    }
+    sampleFrames++;
+    const elapsed = (now - sampleStart) / 1000;
+    if (elapsed < perfCfg.SAMPLE_SECONDS) return;
+
+    sampleDone = true;
+    const fps = sampleFrames / elapsed;
+    if (fps < perfCfg.MIN_FPS && pixelRatioCap > perfCfg.LOW_PIXEL_RATIO) {
+      pixelRatioCap = perfCfg.LOW_PIXEL_RATIO;
+      applyPixelRatio();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  }
+
   function frame(now) {
     if (!state.running) return;
     const dt = Math.min((now - last) / 1000, 0.05);
     last = now;
+    measurePerformance(now);
 
     if (state.intro < 1) {
       driveIntro(state.intro);
@@ -132,14 +170,34 @@ export function createWorld(canvas) {
     raf = requestAnimationFrame(frame);
   }
 
-  function onResize() {
+  const stopResize = onResize(() => {
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    applyPixelRatio();
     resizeCamera(cam, window.innerWidth / window.innerHeight);
-  }
-  window.addEventListener('resize', onResize);
+  });
 
-  return {
+  /* ---------------- background tabs ---------------- */
+  /* A hidden tab has nothing to draw. Browsers throttle requestAnimationFrame
+   * when a tab is backgrounded, but not when the window is merely occluded by
+   * another one, so this is not redundant — and stopping the loop is cheaper
+   * than a throttled one. `pausedByVisibility` keeps this separate from stop()
+   * called for 2D mode: coming back to a hidden tab that was in the reading
+   * view must NOT start the world rendering behind the document. */
+  let pausedByVisibility = false;
+
+  function onVisibility() {
+    if (document.hidden) {
+      if (!state.running) return;
+      pausedByVisibility = true;
+      api.stop();
+    } else if (pausedByVisibility) {
+      pausedByVisibility = false;
+      api.start();
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibility);
+
+  const api = {
     scene,
     camera: cam,
     renderer,
@@ -217,7 +275,8 @@ export function createWorld(canvas) {
 
     dispose() {
       this.stop();
-      window.removeEventListener('resize', onResize);
+      stopResize();
+      document.removeEventListener('visibilitychange', onVisibility);
       chunks.disposeAll();
       if (monument) {
         scene.remove(monument);
@@ -230,4 +289,6 @@ export function createWorld(canvas) {
       renderer.dispose();
     },
   };
+
+  return api;
 }

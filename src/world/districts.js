@@ -34,8 +34,8 @@ const LAYOUT_UNITS = {
   RISER: 0,
   HEADING: 31,
   SUB_LABEL: 56,
-  BODY_START: 89,
-  BODY_STEP: 47,
+  BODY_START: 78,
+  BODY_STEP: 44,
 };
 
 /** World units → a progress offset on this particular route. */
